@@ -114,12 +114,6 @@ print:
     ; cl = 0: print lowercase, or default symbol
     ; cl = 0xFF: print uppercase, or alternate symbol
     ; must increment edi
-    or          cl, cl
-    jnz         upper
-    mov         byte [edi], 'p'
-    ret
-    upper:
-    mov         byte [edi], 'P'
     ret
 
 delete:
@@ -128,20 +122,17 @@ delete:
     ; al = 1: delete next character
     ; must check for boundries (0xB8000 < edi < 0xBFFFF)
     ; change edi apropriatly
-    mov         byte [edi], 'D'
     ret
 
 navigate:
     ; al contains scan code of the arrow key
     ; edi set to the current position of the cursor, DON'T CHANGE IT
     ; must check for boundries (0xB8000 < edi < 0xBFFFF)
-    mov         byte [edi], 'N'
     ret
 
 shortcut_action:
     ; al contains the scan code of the key pressed along with ctrl
     ; edi is already set tot the current position of the cursor, DON'T CHANGE IT
-    mov         byte [edi], 'S'
     ret
     
     times       (0x200 - 2 - ($ - $$)) db 0
