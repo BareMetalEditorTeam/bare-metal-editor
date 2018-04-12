@@ -1,4 +1,5 @@
 *.vhd
+*.bin
 *.lst
 
 # Prerequisites
