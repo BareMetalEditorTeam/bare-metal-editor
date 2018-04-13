@@ -216,12 +216,6 @@ FRESH_STATE     equ 0xffff
     jl          .finish_loop
     cmp         al, 0x8E    ;BKSP
     je          .finish_loop
-; TODO implement the TAB character
-    cmp         al, 0x8F    ;TAB
-    je          .finish_loop
-; TODO implement the ENTER character
-    cmp         al, 0x9C    ;ENTER
-    je          .finish_loop
     cmp         al, 0x9D    ;CTRL
     je          .reset
     cmp         al, 0xAA    ;LEFT SHIFT

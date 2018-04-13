@@ -1,6 +1,7 @@
 *.vhd
 *.bin
 *.lst
+*.log
 
 # Prerequisites
 *.d

@@ -21,8 +21,8 @@ scanCodeToASCII:
 ;Output
 ;  al = ASCII code
     jmp         .start
-.uppercaseScanCodeTable: db "//!@#$%^&*()-=//QWERTYUIOP[]//ASDFGHJKL;",34,"`/|ZXCVBNM<>?/// /"
-.lowercaseScanCodeTable: db "//1234567890_+//qwertyuiop{}//asdfghjkl:",39,"~/\zxcvbnm,.//// /"
+.uppercaseScanCodeTable: db "//!@#$%^&*()-=/",0x09,"QWERTYUIOP[]",0x0a,"/ASDFGHJKL;",0x22,"`/|ZXCVBNM<>?/// /"
+.lowercaseScanCodeTable: db "//1234567890_+/",0x09,"qwertyuiop{}",0x0a,"/asdfghjkl:",0x27,"~/\zxcvbnm,.//// /"
 .start:
     and         al, 0x7f
     or          cl, cl
@@ -67,6 +67,10 @@ putch:
     ; go to the next line
     cmp     al, 0x0a
     je      .linefeed
+    ; if the character is a tab
+    ; advance 4 positions
+    cmp     al, 0x09
+    je      .tab
 
     ; output character
     mov     edi, VIDMEM
@@ -84,6 +88,21 @@ putch:
 .newline:
     xor     bl, bl
     inc     bh
+    jmp     .done
+
+.tab:
+    cld
+    mov     al, ' '
+    mov     edi, VIDMEM
+    shl     ebx, 1
+    add     edi, ebx
+    mov     ecx, 4
+    rep     stosw
+
+    pop     ebx ; restore coordinates
+    add     bl, 4
+    cmp     bl, COLS
+    
 .done:
     ret
 
