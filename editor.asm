@@ -9,26 +9,105 @@ MAX_NUM_TABS    equ 10
 BUFFER_SIZE     equ 1024 ; in bytes
 TOTAL_BUFFERS   equ MAX_NUM_TABS*BUFFER_SIZE
 
+; colors
+TEXT_COLOR      equ 0x0f
+HINT_COLOR      equ 0x07
+
+; strings
+welcome:        db  "This is a new tab, you can start typing right away!",0
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;  A Simple text editor that runs on x86 hardware  ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 editor:
     ; setup a buffer for each tab
-    sub         esp, TOTAL_BUFFERS
-    sub         esp, 20
-    ; stack variables offsets
-BUFFERS         equ  0
-current_tab     equ  TOTAL_BUFFERS
-cursor_array    equ  TOTAL_BUFFERS + 4
+    mov         ebp, esp
 
-    mov         edi, 0xb8000
-    xor         edx, edx    ; used for state
-    ; dx = 0    previous scan code is a character
-    ; dx = 1    previous scan code is shift
-    ; dx = 2    previous scan code is ctrl
-    mov         word [edi], 0x0f41
+    sub         esp, TOTAL_BUFFERS  ; buffers
+    sub         esp, MAX_NUM_TABS*2 ; gap start
+    sub         esp, MAX_NUM_TABS*2 ; gap end
+    sub         esp, 2              ; current tab index
+    sub         esp, MAX_NUM_TABS   ; cursor x coordinate for all tabs
+    sub         esp, MAX_NUM_TABS   ; cursor y coordinate for all tabs
+    and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
+
+    ; stack variables offsets
+buffers         equ TOTAL_BUFFERS
+gap_start       equ buffers + MAX_NUM_TABS*2
+gap_end         equ gap_start + MAX_NUM_TABS*2
+current_tab     equ gap_end + 2
+cursor_x_array  equ current_tab + MAX_NUM_TABS
+cursor_y_array  equ cursor_x_array + MAX_NUM_TABS
+
+
+    ;;;;;;;;;;;;;;;;;;;;;;
+    ;  Initialize State  ;
+    ;;;;;;;;;;;;;;;;;;;;;;
+    
+    mov         edi, VIDMEM     ; VGA color text mode memory address
+
+    ; Program State
+    ; edx = 0        previous scan code is a character
+CHARACTER_STATE equ 0
+    ; edx = 1        previous scan code is shift
+SHIFT_STATE     equ 1
+    ; edx = 2        previous scan code is ctrl
+CTRL_STATE      equ 2
+    ; edx = 0xffff   no key was pressed before
+FRESH_STATE     equ 0xffff
+    ; initial state
+    mov         edx, FRESH_STATE
+
+    ; Initialize variables
+    cld
+    ; gap start array
+    lea         edi, [ebp-gap_start]
+    xor         eax, eax
+    mov         ecx, MAX_NUM_TABS
+    rep         stosw
+    ; gap end array
+    lea         edi, [ebp-gap_end]
+    mov         eax, BUFFER_SIZE
+    mov         ecx, MAX_NUM_TABS
+    rep         stosw
+    ; current tab
+    mov         word [ebp-current_tab], 0
+    ; cursor x array
+    lea         edi, [ebp-cursor_x_array]
+    xor         eax, eax
+    mov         ecx, MAX_NUM_TABS
+    rep         stosb
+    ; cursor y array
+    lea         edi, [ebp-cursor_y_array]
+    xor         eax, eax
+    mov         ecx, MAX_NUM_TABS
+    rep         stosb
+
+    ; print welcome message
+    pusha
+    mov         esi, welcome
+    mov         ah, HINT_COLOR
+    mov         bh, 10
+    mov         bl, 15
+    call        puts
+    popa
+
 ; Wait for keyboard input
 check:
     in          al, 0x64
     test        al, 1   ; is data available at data port?
     jz          check
+    ; a key was pressed
+    cmp         edx, FRESH_STATE
+    jne         .interpretKey
+    ; clear the screen on the first key press
+    pusha
+    call        clrscr
+    popa
+    xor         edx, edx
+.interpretKey:
     ; Get the scan code of the key
     xor         eax, eax
     in          al, 0x60
@@ -36,8 +115,8 @@ check:
     test        al, 0x80
     jnz         break_code
     ; status codes
-    mov         ebx, 1
-    mov         ecx, 2
+    mov         ebx, SHIFT_STATE
+    mov         ecx, CTRL_STATE
 ; Make Codes
 ;; Left Shift
     cmp         al, 0x2A
@@ -51,17 +130,19 @@ check:
 ;; Backspace
     cmp         al, 0x0E
     jne         del
-    push        edx
+
+    pusha
     xor         al, al
-    call        delete
-    pop         edx
+    call        bufdel
+    popa
 del:
     cmp         al, 0x53
     jne         arrows
-    push        edx
+
+    pusha
     mov         al, 1
-    call        delete
-    pop         edx
+    call        bufdel
+    popa
 arrows:
 ;; Arrows
 ;;; Up Arrow
@@ -83,7 +164,7 @@ nav:
 ;; Characters
 ; Wait for the break code
 character:
-    jmp          moveCursor
+    jmp          refreshScreen
 ; Break Codes
 break_code:
     cmp         al, 0x82
@@ -106,91 +187,98 @@ break_code:
 ; It is a break code of a character
     or          edx, edx
     jnz         special
-    push        edx
+
+    pusha
     xor         cl, cl
     call        scanCodeToASCII
-    call        print
-    pop         edx
-    jmp         moveCursor
+
+    push        eax
+
+    ; buffer params
+    lea         edi, [ebp-buffers]
+    movzx       eax, word [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         edi, eax
+
+    ; gap parameters
+    movzx       eax, word [ebp-current_tab]
+    movzx       ebx, word [ebp-gap_start+eax*2]
+    movzx       edx, word [ebp-gap_end+eax*2]
+
+    pop         eax
+
+    call        bufins
+
+    movzx       eax, word [ebp-current_tab]
+    mov         [ebp-gap_start+eax*2], ebx
+    mov         [ebp-gap_end+eax*2], edx
+    popa
+
+    jmp         refreshScreen
 special:
     cmp         edx, 1
     jne         shortcut
-    push        edx
+
+    pusha
     mov         cl, 1
     call        scanCodeToASCII
-    call        print
-    pop         edx
-    jmp         moveCursor
+
+    push        eax
+
+    ; buffer params
+    lea         edi, [ebp-buffers]
+    movzx       eax, word [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         edi, eax
+
+    ; gap parameters
+    movzx       eax, word [ebp-current_tab]
+    movzx       ebx, word [ebp-gap_start+eax*2]
+    movzx       edx, word [ebp-gap_end+eax*2]
+
+    pop         eax
+
+    call        bufins
+
+    movzx       eax, word [ebp-current_tab]
+    mov         [ebp-gap_start+eax*2], ebx
+    mov         [ebp-gap_end+eax*2], edx
+    popa
+
+    jmp         refreshScreen
 shortcut:
-    push        edx
+    pusha
     call        shortcut_action
-    pop         edx
-    jmp         moveCursor
+    popa
+
+    jmp         refreshScreen
+
 reset:
     xor         edx, edx
-moveCursor:
-    push        edx
-    call        calcCursorPosition
-    pop         edx
+refreshScreen:
+    pusha
+
+    ; buffer params
+    lea         esi, [ebp-buffers]
+    movzx       eax, word [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         esi, eax
+
+    mov         ecx, BUFFER_SIZE
+
+    ; gap parameters
+    movzx       eax, word [ebp-current_tab]
+    movzx       ebx, word [ebp-gap_start+eax*2]
+    movzx       edx, word [ebp-gap_end+eax*2]
+
+    call        bufprint
+
+    popa
+finish_loop:
     jmp         check
-
-print:
-    ; al contains the ASCII code
-    ; edi already set to the correct position
-    ;
-    ; After the subroutine returns edi must point
-    ; to a valid VGA color text mode address (0xb8000 - 0xbffff)
-    mov         ah, 0x0f
-    mov         [edi], ax
-    add         edi, 2
-    ret
-
-calcCursorPosition:
-    ; calculate position offset
-    mov         ebx, edi
-    sub         ebx, 0xB8000
-    shr         ebx, 1
-
-    ; write the low byte
-    mov         al, 0x0f
-    mov         dx, 0x03d4
-    out         dx, al
-
-    mov         dx, 0x03d5
-    mov         al, bl
-    out         dx, al
-
-    ; write the high byte
-    mov         al, 0x0e
-    mov         dx, 0x03d4
-    out         dx, al
-
-    mov         al, bh
-    mov         dx, 0x03d5
-    out         dx, al
-    ret
-
-delete:
-    ; edi is set to the current position of the cursor, DON'T CHANGE IT
-    ; al = 0: delete previous character
-    ; al = 1: delete next character
-    ; must check for boundries (0xB8000 < edi < 0xBFFFF)
-    ; change edi apropriatly
-    or          al, al
-    jnz         .del
-    cmp         edi, 0xB8000
-    je          .done
-    sub         edi, 2
-    mov         byte [edi], ' '
-    mov         byte [edi+1], 0x00
-    jmp         .done
-    .del:
-    cmp         edi, 0xBFFFF
-    je          .done
-    mov         byte [edi+2], ' '
-    mov         byte [edi+3], 0x00
-    .done:
-    ret
 
 navigate:
     ; al contains scan code of the arrow key
