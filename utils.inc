@@ -6,6 +6,7 @@
 %define LINES   25
 
 %define WHITE_ON_BLACK 0x0f
+%define GREY_ON_BLACK 0x07
 
 bits 32
 
@@ -65,7 +66,7 @@ putch:
     ; if the character is a line feed
     ; go to the next line
     cmp     al, 0x0a
-    je      .newline
+    je      .linefeed
 
     ; output character
     mov     edi, VIDMEM
@@ -78,8 +79,9 @@ putch:
     je      .newline
     jmp     .done
 
-.newline:
+.linefeed:
     pop     ebx ; restore coordinates
+.newline:
     xor     bl, bl
     inc     bh
 .done:

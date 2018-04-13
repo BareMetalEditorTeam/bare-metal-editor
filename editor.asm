@@ -10,8 +10,8 @@ BUFFER_SIZE     equ 1024 ; in bytes
 TOTAL_BUFFERS   equ MAX_NUM_TABS*BUFFER_SIZE
 
 ; colors
-TEXT_COLOR      equ 0x0f
-HINT_COLOR      equ 0x07
+TEXT_COLOR      equ WHITE_ON_BLACK
+HINT_COLOR      equ GREY_ON_BLACK
 
 ; strings
 welcome:        db  "This is a new tab, you can start typing right away!",0
@@ -22,9 +22,9 @@ welcome:        db  "This is a new tab, you can start typing right away!",0
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 editor:
-    ; setup a buffer for each tab
     mov         ebp, esp
 
+    ; setup a buffer for each tab
     sub         esp, TOTAL_BUFFERS  ; buffers
     sub         esp, MAX_NUM_TABS*2 ; gap start
     sub         esp, MAX_NUM_TABS*2 ; gap end
