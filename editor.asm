@@ -29,8 +29,6 @@ editor:
     sub         esp, MAX_NUM_TABS*2 ; gap start
     sub         esp, MAX_NUM_TABS*2 ; gap end
     sub         esp, 2              ; current tab index
-    sub         esp, MAX_NUM_TABS   ; cursor x coordinate for all tabs
-    sub         esp, MAX_NUM_TABS   ; cursor y coordinate for all tabs
     and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
 
     ; stack variables offsets
@@ -38,14 +36,12 @@ buffers         equ TOTAL_BUFFERS
 gap_start       equ buffers + MAX_NUM_TABS*2
 gap_end         equ gap_start + MAX_NUM_TABS*2
 current_tab     equ gap_end + 2
-cursor_x_array  equ current_tab + MAX_NUM_TABS
-cursor_y_array  equ cursor_x_array + MAX_NUM_TABS
 
 
     ;;;;;;;;;;;;;;;;;;;;;;
     ;  Initialize State  ;
     ;;;;;;;;;;;;;;;;;;;;;;
-    
+
     mov         edi, VIDMEM     ; VGA color text mode memory address
 
     ; Program State
@@ -74,16 +70,6 @@ FRESH_STATE     equ 0xffff
     rep         stosw
     ; current tab
     mov         word [ebp-current_tab], 0
-    ; cursor x array
-    lea         edi, [ebp-cursor_x_array]
-    xor         eax, eax
-    mov         ecx, MAX_NUM_TABS
-    rep         stosb
-    ; cursor y array
-    lea         edi, [ebp-cursor_y_array]
-    xor         eax, eax
-    mov         ecx, MAX_NUM_TABS
-    rep         stosb
 
     ; print welcome message
     pusha
@@ -202,9 +188,31 @@ FRESH_STATE     equ 0xffff
     cmp         al, 0x50
     jne         .character
 .nav:
-    push        edx
+    pusha
+    push        eax ; save arrow scan code
+
+    ; buffer params
+    lea         edi, [ebp-buffers]
+    movzx       eax, word [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         edi, eax
+
+    ; gap parameters
+    movzx       eax, word [ebp-current_tab]
+    movzx       ebx, word [ebp-gap_start+eax*2]
+    movzx       edx, word [ebp-gap_end+eax*2]
+
+    pop         eax
+
     call        navigate
-    pop         edx
+
+    movzx       eax, word [ebp-current_tab]
+    mov         [ebp-gap_start+eax*2], ebx
+    mov         [ebp-gap_end+eax*2], edx
+
+    popa
+
     jmp         .refreshScreen
 ;; Characters
 ; Wait for the break code
@@ -321,10 +329,52 @@ FRESH_STATE     equ 0xffff
 .finish_loop:
     jmp         .check
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;  Handle navigation with in a tab  ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 navigate:
-    ; al contains scan code of the arrow key
-    ; edi set to the current position of the cursor, DON'T CHANGE IT
-    ; must check for boundries (0xB8000 < edi < 0xBFFFF)
+;Parameters
+;  al = scan code of an arrow
+;  edi = current tab buffer
+;  ebx = gap start offset
+;  edx = gap end offset
+;Output
+;  ebx = final gap start offset
+;  edx = final gap end offset
+    and         al, 0x7f    ; make sure it is a make code
+
+    cmp         al, 0x4b    ; LEFT
+    jne         .right
+    ; if the cursor is on the begining of the buffer
+    ; do nothing
+    or          ebx, ebx
+    jle         .done
+    ; otherwise, shift the gap to the left
+    dec         ebx
+    dec         edx
+    mov         al, [edi+ebx]
+    mov         [edi+edx], al
+    jmp         .done
+
+.right:
+    cmp         al, 0x4d    ; RIGHT
+    jne         .up
+
+    ; if the cursor is on the end of the buffer
+    ; or if there are no characters after the cursor
+    ; do nothing
+    cmp         ebx, BUFFER_SIZE-1
+    jge         .done
+    cmp         edx, BUFFER_SIZE
+    je          .done
+    ; otherwise, shift the gap to the right
+    mov         al, [edi+edx]
+    mov         [edi+ebx], al
+    inc         ebx
+    inc         edx
+.up:
+.done:
     ret
 
 shortcut_action:

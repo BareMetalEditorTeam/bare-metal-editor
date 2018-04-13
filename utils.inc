@@ -313,7 +313,9 @@ bufins:
 ;  ebx = final gap start offset
 ;  edx = final gap end offset
 
-    cmp     ebx, edx
+    mov     ecx, edx
+    dec     ecx
+    cmp     ebx, ecx
     je      .done
 
     mov     [edi+ebx], al
@@ -344,6 +346,7 @@ bufdel:
     or     ebx, ebx
     jz      .done
     dec     ebx
+    jmp     .done
 
 .after:
     cmp     edx, ecx
