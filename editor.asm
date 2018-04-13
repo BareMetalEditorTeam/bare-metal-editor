@@ -212,21 +212,21 @@ FRESH_STATE     equ 0xffff
     jmp          .finish_loop
 ; Break Codes
 .break_code:
-    cmp         al, 0x82
+    cmp         al, 0x82 ; ESC
     jl          .finish_loop
-    cmp         al, 0x8E    ;BKSP
+    cmp         al, 0x8E ; BKSP
     je          .finish_loop
-    cmp         al, 0x9D    ;CTRL
+    cmp         al, 0x9D ; CTRL
     je          .reset
-    cmp         al, 0xAA    ;LEFT SHIFT
+    cmp         al, 0xAA ; LEFT SHIFT
     je          .reset
-    cmp         al, 0xB6
+    cmp         al, 0xB6 ; RIGHT SHIFT
     je          .reset
+    cmp         al, 0xB9 ; SPACE
     jg          .finish_loop
 ; It is a break code of a character
     or          edx, edx
     jnz         .special
-
     pusha
     xor         cl, cl
     call        scanCodeToASCII
