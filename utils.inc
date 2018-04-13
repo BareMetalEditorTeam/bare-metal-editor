@@ -313,6 +313,9 @@ bufdel:
 ;  ecx = buffer size
 ;  ebx = gap start offset
 ;  edx = gap end offset
+;Output
+;  ebx = final gap start offset
+;  edx = final gap end offset
 
     or      al, al
     jnz     .after

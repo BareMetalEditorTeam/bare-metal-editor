@@ -95,10 +95,10 @@ FRESH_STATE     equ 0xffff
     popa
 
 ; Wait for keyboard input
-check:
+.check:
     in          al, 0x64
     test        al, 1   ; is data available at data port?
-    jz          check
+    jz          .check
     ; a key was pressed
     cmp         edx, FRESH_STATE
     jne         .interpretKey
@@ -113,7 +113,7 @@ check:
     in          al, 0x60
 ; check if its a make code or a break code
     test        al, 0x80
-    jnz         break_code
+    jnz         .break_code
     ; status codes
     mov         ebx, SHIFT_STATE
     mov         ecx, CTRL_STATE
@@ -129,64 +129,109 @@ check:
     cmove       edx, ecx
 ;; Backspace
     cmp         al, 0x0E
-    jne         del
+    jne         .del
 
+    ; Delete from buffer
     pusha
-    xor         al, al
+
+    ; buffer params
+    lea         edi, [ebp-buffers]
+    movzx       eax, word [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         edi, eax
+
+    mov         ecx, BUFFER_SIZE
+
+    ; gap parameters
+    movzx       eax, word [ebp-current_tab]
+    movzx       ebx, word [ebp-gap_start+eax*2]
+    movzx       edx, word [ebp-gap_end+eax*2]
+
+    xor         eax, eax
+
     call        bufdel
+
+    movzx       eax, word [ebp-current_tab]
+    mov         [ebp-gap_start+eax*2], ebx
+    mov         [ebp-gap_end+eax*2], edx
     popa
-del:
+    jmp         .refreshScreen
+.del:
     cmp         al, 0x53
-    jne         arrows
+    jne         .arrows
 
+    ; Delete from buffer
     pusha
-    mov         al, 1
+
+    ; buffer params
+    lea         edi, [ebp-buffers]
+    movzx       eax, word [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         edi, eax
+
+    mov         ecx, BUFFER_SIZE
+
+    ; gap parameters
+    movzx       eax, word [ebp-current_tab]
+    movzx       ebx, word [ebp-gap_start+eax*2]
+    movzx       edx, word [ebp-gap_end+eax*2]
+
+    mov         eax, 1
+
     call        bufdel
+
+    movzx       eax, word [ebp-current_tab]
+    mov         [ebp-gap_start+eax*2], ebx
+    mov         [ebp-gap_end+eax*2], edx
     popa
-arrows:
+    jmp         .refreshScreen
+.arrows:
 ;; Arrows
 ;;; Up Arrow
     cmp         al, 0x48
-    je          nav
+    je          .nav
 ;;; Left Arrow
     cmp         al, 0x4B
-    je          nav
+    je          .nav
 ;;; Right Arrow
     cmp         al, 0x4D
-    je          nav
+    je          .nav
 ;; Down Arrow
     cmp         al, 0x50
-    jne         character
-nav:
+    jne         .character
+.nav:
     push        edx
     call        navigate
     pop         edx
+    jmp         .refreshScreen
 ;; Characters
 ; Wait for the break code
-character:
-    jmp          refreshScreen
+.character:
+    jmp          .finish_loop
 ; Break Codes
-break_code:
+.break_code:
     cmp         al, 0x82
-    jl          check
+    jl          .finish_loop
     cmp         al, 0x8E    ;BKSP
-    je          check
+    je          .finish_loop
 ; TODO implement the TAB character
     cmp         al, 0x8F    ;TAB
-    je          check
+    je          .finish_loop
 ; TODO implement the ENTER character
     cmp         al, 0x9C    ;ENTER
-    je          check
+    je          .finish_loop
     cmp         al, 0x9D    ;CTRL
-    je          reset
+    je          .reset
     cmp         al, 0xAA    ;LEFT SHIFT
-    je          reset
+    je          .reset
     cmp         al, 0xB6
-    je          reset
-    jg          check
+    je          .reset
+    jg          .finish_loop
 ; It is a break code of a character
     or          edx, edx
-    jnz         special
+    jnz         .special
 
     pusha
     xor         cl, cl
@@ -215,10 +260,10 @@ break_code:
     mov         [ebp-gap_end+eax*2], edx
     popa
 
-    jmp         refreshScreen
-special:
+    jmp         .refreshScreen
+.special:
     cmp         edx, 1
-    jne         shortcut
+    jne         .shortcut
 
     pusha
     mov         cl, 1
@@ -247,18 +292,20 @@ special:
     mov         [ebp-gap_end+eax*2], edx
     popa
 
-    jmp         refreshScreen
-shortcut:
+    jmp         .refreshScreen
+.shortcut:
     pusha
     call        shortcut_action
     popa
 
-    jmp         refreshScreen
+    jmp         .refreshScreen
 
-reset:
+.reset:
     xor         edx, edx
-refreshScreen:
+.refreshScreen:
     pusha
+
+    call        clrscr
 
     ; buffer params
     lea         esi, [ebp-buffers]
@@ -277,8 +324,8 @@ refreshScreen:
     call        bufprint
 
     popa
-finish_loop:
-    jmp         check
+.finish_loop:
+    jmp         .check
 
 navigate:
     ; al contains scan code of the arrow key
