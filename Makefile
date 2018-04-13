@@ -1,5 +1,7 @@
 vbox: editor.vhd
 	VirtualBox --startvm Editor
+vbox-debug: editor.vhd
+	VirtualBox --startvm Editor --debug-command-line
 editor.vhd: bootloader.bin editor.bin vhdfooter.bin
 	cat bootloader.bin editor.bin vhdfooter.bin > editor.vhd
 qemu: bootloader.bin editor.bin
