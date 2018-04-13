@@ -91,17 +91,16 @@ putch:
     jmp     .done
 
 .tab:
-    cld
-    mov     al, ' '
-    mov     edi, VIDMEM
-    shl     ebx, 1
-    add     edi, ebx
-    mov     ecx, 4
-    rep     stosw
-
     pop     ebx ; restore coordinates
-    add     bl, 4
-    cmp     bl, COLS
+    mov     al, ' '
+    mov     ecx, 4
+.print_tab:
+    push    ecx
+    push    eax
+    call    putch
+    pop     eax
+    pop     ecx
+    loop    .print_tab
     
 .done:
     ret
