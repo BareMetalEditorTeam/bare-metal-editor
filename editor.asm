@@ -19,7 +19,7 @@ check:
     jz          check
 ; check if its a make code or a break code
     in          al, 0x60
-    test        al, 0x80
+    test        al, 0x80;1000 0000
     jnz         break_code
     ; status codes
     mov         bx, 1
@@ -108,7 +108,32 @@ reset:
     xor         dx, dx
     jmp         check
 
+scantablesmall   db " _1234567890-=  QWERTYUIOP[]__ASDFGHJKL;'`_\ZXCVBNM,./" ,0
+scantablecapital db " _1234567890_+  qwertyuiop{}__asdfghjkl:_~_|zxcvbnm<>?" ,0
+
 print:
+
+and al,0x7f
+cmp cl,0xff
+je loop1
+mov ebx,scantablesmall
+xlat 
+mov [edi],al 
+inc edi
+inc edi
+ret
+loop1:
+mov ebx,scantablecapital
+xlat
+mov [edi],al 
+inc edi
+inc edi
+ret
+
+
+
+
+
     ; al contains the scan code
     ; edi already set to the correct position, DON'T CHANGE IT
     ; cl = 0: print lowercase, or default symbol
