@@ -51,7 +51,7 @@ putch:
 ;Output
 ;  bh = final y coordinate
 ;  bl = final x coordinate
-    
+
     cmp     bh, LINES-1
     jl      .print
     cmp     bl, COLS
@@ -386,8 +386,8 @@ movegap:
     cmp     eax, ebx
     jg      .right
 
-; left
-    ; difference
+; move to the left
+    ; number of bytes to move
     mov     ecx, ebx
     sub     ecx, eax
 
@@ -408,7 +408,7 @@ movegap:
     jmp     .done
 
 .right:
-    ; difference
+    ; number of bytes to move
     mov     ecx, eax
     sub     ecx, ebx
 
@@ -517,19 +517,22 @@ nextline:
     ; find the number of characters after the gap
     sub     ecx, edx
     jz      .notfound
-    mov     edx, ecx
+    mov     ebx, ecx
 
     xor     ecx, ecx
 .loop:
-    cmp     ecx, edx
+    cmp     ecx, ebx
     je      .done
+
     inc     ecx
+
     mov     al, [edi+ecx]
     cmp     al, 0x0a
     jne     .loop
+
 .found:
     mov     eax, 1
-    dec     ecx
+    add     ecx, edx
     jmp     .done
 .notfound:
     xor     eax, eax

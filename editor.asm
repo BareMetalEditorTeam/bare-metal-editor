@@ -26,18 +26,18 @@ editor:
 
     ; setup a buffer for each tab
     sub         esp, TOTAL_BUFFERS  ; buffers
-    sub         esp, MAX_NUM_TABS*2 ; gap start
-    sub         esp, MAX_NUM_TABS*2 ; gap end
+    sub         esp, MAX_NUM_TABS*4 ; gap start
+    sub         esp, MAX_NUM_TABS*4 ; gap end
     sub         esp, MAX_NUM_TABS   ; tab state
-    sub         esp, 2              ; current tab index
+    sub         esp, 4              ; current tab index
     and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
 
     ; stack variables offsets
 buffers         equ TOTAL_BUFFERS
-gap_start       equ buffers + MAX_NUM_TABS*2
-gap_end         equ gap_start + MAX_NUM_TABS*2
+gap_start       equ buffers + MAX_NUM_TABS*4
+gap_end         equ gap_start + MAX_NUM_TABS*4
 tab_state       equ gap_end + MAX_NUM_TABS
-current_tab     equ tab_state + 2
+current_tab     equ tab_state + 4
 
 
     ;;;;;;;;;;;;;;;;;;;;;;
@@ -74,13 +74,13 @@ FRESH_TAB_STATE equ 1
     lea         edi, [ebp-gap_start]
     xor         eax, eax
     mov         ecx, MAX_NUM_TABS
-    rep         stosw
+    rep         stosd
     ; gap end array
     cld
     lea         edi, [ebp-gap_end]
     mov         ax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
-    rep         stosw
+    rep         stosd
     ; tab state array
     cld
     lea         edi, [ebp-tab_state]
@@ -88,7 +88,7 @@ FRESH_TAB_STATE equ 1
     mov         ecx, MAX_NUM_TABS
     rep         stosb
     ; current tab
-    mov         word [ebp-current_tab], 0
+    mov         dword [ebp-current_tab], 0
 
 ; Wait for keyboard input
 .check:
@@ -153,7 +153,7 @@ FRESH_TAB_STATE equ 1
 
     ; buffer params
     lea         edi, [ebp-buffers]
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     mov         ecx, BUFFER_SIZE
     mul         ecx
     add         edi, eax
@@ -161,17 +161,17 @@ FRESH_TAB_STATE equ 1
     mov         ecx, BUFFER_SIZE
 
     ; gap parameters
-    movzx       eax, word [ebp-current_tab]
-    movzx       ebx, word [ebp-gap_start+eax*2]
-    movzx       edx, word [ebp-gap_end+eax*2]
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
 
     xor         eax, eax
 
     call        bufdel
 
-    movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], bx
-    mov         [ebp-gap_end+eax*2], dx
+    mov         eax, [ebp-current_tab]
+    mov         [ebp-gap_start+eax*4], ebx
+    mov         [ebp-gap_end+eax*4], edx
     popa
     jmp         .refreshScreen
 .del:
@@ -183,7 +183,7 @@ FRESH_TAB_STATE equ 1
 
     ; buffer params
     lea         edi, [ebp-buffers]
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     mov         ecx, BUFFER_SIZE
     mul         ecx
     add         edi, eax
@@ -191,17 +191,17 @@ FRESH_TAB_STATE equ 1
     mov         ecx, BUFFER_SIZE
 
     ; gap parameters
-    movzx       eax, word [ebp-current_tab]
-    movzx       ebx, word [ebp-gap_start+eax*2]
-    movzx       edx, word [ebp-gap_end+eax*2]
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
 
     mov         eax, 1
 
     call        bufdel
 
-    movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], bx
-    mov         [ebp-gap_end+eax*2], dx
+    mov         eax, [ebp-current_tab]
+    mov         [ebp-gap_start+eax*4], ebx
+    mov         [ebp-gap_end+eax*4], edx
     popa
     jmp         .refreshScreen
 .arrows:
@@ -224,23 +224,23 @@ FRESH_TAB_STATE equ 1
 
     ; buffer params
     lea         edi, [ebp-buffers]
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     mov         ecx, BUFFER_SIZE
     mul         ecx
     add         edi, eax
 
     ; gap parameters
-    movzx       eax, word [ebp-current_tab]
-    movzx       ebx, word [ebp-gap_start+eax*2]
-    movzx       edx, word [ebp-gap_end+eax*2]
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
 
     pop         eax
 
     call        navigate
 
-    movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], bx
-    mov         [ebp-gap_end+eax*2], dx
+    mov         eax, [ebp-current_tab]
+    mov         [ebp-gap_start+eax*4], ebx
+    mov         [ebp-gap_end+eax*4], edx
 
     popa
 
@@ -286,23 +286,23 @@ FRESH_TAB_STATE equ 1
 
     ; buffer params
     lea         edi, [ebp-buffers]
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     mov         ecx, BUFFER_SIZE
     mul         ecx
     add         edi, eax
 
     ; gap parameters
-    movzx       eax, word [ebp-current_tab]
-    movzx       ebx, word [ebp-gap_start+eax*2]
-    movzx       edx, word [ebp-gap_end+eax*2]
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
 
     pop         eax
 
     call        bufins
 
-    movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], bx
-    mov         [ebp-gap_end+eax*2], dx
+    mov         eax, [ebp-current_tab]
+    mov         [ebp-gap_start+eax*4], ebx
+    mov         [ebp-gap_end+eax*4], edx
     popa
 
     jmp         .refreshScreen
@@ -323,23 +323,23 @@ FRESH_TAB_STATE equ 1
 
     ; buffer params
     lea         edi, [ebp-buffers]
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     mov         ecx, BUFFER_SIZE
     mul         ecx
     add         edi, eax
 
     ; gap parameters
-    movzx       eax, word [ebp-current_tab]
-    movzx       ebx, word [ebp-gap_start+eax*2]
-    movzx       edx, word [ebp-gap_end+eax*2]
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
 
     pop         eax
 
     call        bufins
 
-    movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], bx
-    mov         [ebp-gap_end+eax*2], dx
+    mov         eax, [ebp-current_tab]
+    mov         [ebp-gap_start+eax*4], ebx
+    mov         [ebp-gap_end+eax*4], edx
     popa
 
     jmp         .refreshScreen
@@ -496,6 +496,7 @@ navigate:
 
     pusha
     call        previousline
+    dec         ecx
     mov         [ebp-.target], ecx
     mov         [ebp-.exists], al
     popa
@@ -505,6 +506,7 @@ navigate:
 
     pusha
     call        lineoffset
+    dec         ecx
     mov         [ebp-.current], ecx
     popa
 
@@ -551,6 +553,7 @@ navigate:
     mov         eax, [ebp-.target]
     mov         ecx, BUFFER_SIZE
     call        linelen
+
     cmp         ecx, [ebp-.current]
     jl          .down_cutoff
     mov         eax, [ebp-.current]
@@ -560,7 +563,6 @@ navigate:
     add         [ebp-.target], ecx
 .move_down:
     popa
-
 
     mov         eax, [ebp-.target]
     call        movegap
