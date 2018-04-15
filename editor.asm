@@ -480,8 +480,6 @@ navigate:
     ; if the cursor is on the end of the buffer
     ; or if there are no characters after the cursor
     ; do nothing
-    cmp         ebx, BUFFER_SIZE-1
-    jge         .done
     cmp         edx, BUFFER_SIZE
     je          .done
     ; otherwise, shift the gap to the right
@@ -551,6 +549,7 @@ navigate:
 
     pusha
     mov         eax, [ebp-.target]
+    inc         eax
     mov         ecx, BUFFER_SIZE
     call        linelen
 

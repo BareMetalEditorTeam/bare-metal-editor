@@ -410,7 +410,7 @@ movegap:
 .right:
     ; number of bytes to move
     mov     ecx, eax
-    sub     ecx, ebx
+    sub     ecx, edx
 
     mov     esi, edi
     add     esi, edx
@@ -422,7 +422,7 @@ movegap:
     rep     movsb
     pop     ecx
 
-    mov     ebx, eax
+    add     ebx, ecx
     add     edx, ecx
 
 .done:
@@ -524,9 +524,9 @@ nextline:
     cmp     ecx, ebx
     je      .done
 
+    mov     al, [edi+ecx]
     inc     ecx
 
-    mov     al, [edi+ecx]
     cmp     al, 0x0a
     jne     .loop
 
@@ -557,34 +557,50 @@ linelen:
 .len:       equ 4
 .n:         equ .len + 4
 
-    add     edi, eax
+    mov     [ebp-.n], ecx ; save length
+    mov     dword [ebp-.len], 0
 
+    ; does the line start before the gap?
     cmp     eax, ebx
     jg      .postgap_loop
 
-    mov     [ebp-.n], ecx ; save length
 
-    xor     ecx, ecx
+    push    eax ; save the line start offset 
+
+    ; move to the start of the line
+    add     edi, eax
+    ; get the number of characters before the gap
+    sub     ebx, eax
 .pregap_loop:
-    cmp     ecx, ebx
-    jz      .postgap_loop
+    cmp     [ebp-.len], ebx
+    jz      .pregap_done
+
+    mov     ecx, [ebp-.len]
     mov     al, [edi+ecx]
     cmp     al, 0x0a
-    je      .done
-    inc     ecx
-    mov     [ebp-.len], ecx
+    je      .done_pre
+
+    inc     dword [ebp-.len]
     jmp     .pregap_loop
+.pregap_done:
+    ; return to the beginning of the buffer
+    pop     eax
+    sub     edi, eax
 
 .postgap_loop:
     cmp     edx, [ebp-.n]
     je      .done
+
     mov     al, [edi+edx]
     cmp     al, 0x0a
     je      .done
+
     inc     edx
     inc     dword [ebp-.len]
     jmp     .postgap_loop
 
+.done_pre:
+    pop     eax
 .done:
     mov     ecx, [ebp-.len]
     leave
