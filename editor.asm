@@ -28,6 +28,7 @@ editor:
     sub         esp, TOTAL_BUFFERS  ; buffers
     sub         esp, MAX_NUM_TABS*2 ; gap start
     sub         esp, MAX_NUM_TABS*2 ; gap end
+    sub         esp, MAX_NUM_TABS   ; tab state
     sub         esp, 2              ; current tab index
     and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
 
@@ -35,7 +36,8 @@ editor:
 buffers         equ TOTAL_BUFFERS
 gap_start       equ buffers + MAX_NUM_TABS*2
 gap_end         equ gap_start + MAX_NUM_TABS*2
-current_tab     equ gap_end + 2
+tab_state       equ gap_end + MAX_NUM_TABS
+current_tab     equ tab_state + 2
 
 
     ;;;;;;;;;;;;;;;;;;;;;;
@@ -45,32 +47,53 @@ current_tab     equ gap_end + 2
     mov         edi, VIDMEM     ; VGA color text mode memory address
 
     ; Program State
-    ; edx = 0        previous scan code is a character
+    ; dl = 0        previous scan code is a character
 CHARACTER_STATE equ 0
-    ; edx = 1        previous scan code is shift
+    ; shift is pressed
 SHIFT_STATE     equ 1
-    ; edx = 2        previous scan code is ctrl
+    ; ctrl is pressed
 CTRL_STATE      equ 2
-    ; edx = 0xffff   no key was pressed before
-FRESH_STATE     equ 0xffff
+    ; both shift and ctrl are pressed
+SHIFT_CTRL_STATE equ 3
+
+    ; Tab State
+    ; old tab
+OLD_TAB         equ 0
+    ; new tab
+FRESH_TAB_STATE equ 1
+
     ; initial state
-    mov         edx, FRESH_STATE
+    ; no key is pressed, and the tab is new
+    ; dx = 0x0100
+    xor         edx, edx
+    mov         dh, FRESH_TAB_STATE
 
     ; Initialize variables
-    cld
     ; gap start array
+    cld
     lea         edi, [ebp-gap_start]
     xor         eax, eax
     mov         ecx, MAX_NUM_TABS
     rep         stosw
     ; gap end array
+    cld
     lea         edi, [ebp-gap_end]
-    mov         eax, BUFFER_SIZE
+    mov         ax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
     rep         stosw
+    ; tab state array
+    cld
+    lea         edi, [ebp-tab_state]
+    mov         al, 0x01
+    mov         ecx, MAX_NUM_TABS
+    rep         stosb
     ; current tab
     mov         word [ebp-current_tab], 0
 
+; Wait for keyboard input
+.check:
+    cmp         dh, FRESH_TAB_STATE
+    jne         .wait_for_key
     ; print welcome message
     pusha
     mov         esi, welcome
@@ -80,19 +103,10 @@ FRESH_STATE     equ 0xffff
     call        puts
     popa
 
-; Wait for keyboard input
-.check:
+.wait_for_key:
     in          al, 0x64
-    test        al, 1   ; is data available at data port?
+    test        al, 1   ; is data available at the data port?
     jz          .check
-    ; a key was pressed
-    cmp         edx, FRESH_STATE
-    jne         .interpretKey
-    ; clear the screen on the first key press
-    pusha
-    call        clrscr
-    popa
-    xor         edx, edx
 .interpretKey:
     ; Get the scan code of the key
     xor         eax, eax
@@ -100,20 +114,37 @@ FRESH_STATE     equ 0xffff
 ; check if its a make code or a break code
     test        al, 0x80
     jnz         .break_code
-    ; status codes
-    mov         ebx, SHIFT_STATE
-    mov         ecx, CTRL_STATE
 ; Make Codes
 ;; Left Shift
     cmp         al, 0x2A
-    cmove       edx, ebx
+    jne         .rshift
+    cmp         dl, CTRL_STATE
+    je          .shift_ctrl
+    mov         dl, SHIFT_STATE
+    jmp         .makecodes_done
 ;; Right Shift
+.rshift:
     cmp         al, 0x36
-    cmove       edx, ebx
+    jne         .ctrl
+    cmp         dl, CTRL_STATE
+    je          .shift_ctrl
+    mov         dl, SHIFT_STATE
+    jmp         .makecodes_done
 ;; Ctrl
+.ctrl:
     cmp         al, 0x1D
-    cmove       edx, ecx
+    jne         .bkspace
+    cmp         dl, SHIFT_STATE
+    je          .shift_ctrl
+    mov         dl, CTRL_STATE
+    jmp         .makecodes_done
+
+.shift_ctrl:
+    mov         dl, SHIFT_CTRL_STATE
+    jmp         .makecodes_done
+
 ;; Backspace
+.bkspace:
     cmp         al, 0x0E
     jne         .del
 
@@ -139,8 +170,8 @@ FRESH_STATE     equ 0xffff
     call        bufdel
 
     movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], ebx
-    mov         [ebp-gap_end+eax*2], edx
+    mov         [ebp-gap_start+eax*2], bx
+    mov         [ebp-gap_end+eax*2], dx
     popa
     jmp         .refreshScreen
 .del:
@@ -169,8 +200,8 @@ FRESH_STATE     equ 0xffff
     call        bufdel
 
     movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], ebx
-    mov         [ebp-gap_end+eax*2], edx
+    mov         [ebp-gap_start+eax*2], bx
+    mov         [ebp-gap_end+eax*2], dx
     popa
     jmp         .refreshScreen
 .arrows:
@@ -208,8 +239,8 @@ FRESH_STATE     equ 0xffff
     call        navigate
 
     movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], ebx
-    mov         [ebp-gap_end+eax*2], edx
+    mov         [ebp-gap_start+eax*2], bx
+    mov         [ebp-gap_end+eax*2], dx
 
     popa
 
@@ -217,11 +248,23 @@ FRESH_STATE     equ 0xffff
 ;; Characters
 ; Wait for the break code
 .character:
+    cmp         dh, FRESH_TAB_STATE
+    jne         .makecodes_done
+    ; clear the screen on the first key press
+    pusha
+    call        clrscr
+    popa
+    xor         dh, dh
+.makecodes_done:
     jmp          .finish_loop
-; Break Codes
+
+;;;;;;;;;;;;;;;;;
+;  Break Codes  ;
+;;;;;;;;;;;;;;;;;
+
 .break_code:
-    cmp         al, 0x82 ; ESC
-    jl          .finish_loop
+    cmp         al, 0x81 ; ESC
+    je          .finish_loop
     cmp         al, 0x8E ; BKSP
     je          .finish_loop
     cmp         al, 0x9D ; CTRL
@@ -233,7 +276,7 @@ FRESH_STATE     equ 0xffff
     cmp         al, 0xB9 ; SPACE
     jg          .finish_loop
 ; It is a break code of a character
-    or          edx, edx
+    cmp         dl, CHARACTER_STATE
     jnz         .special
     pusha
     xor         cl, cl
@@ -258,13 +301,18 @@ FRESH_STATE     equ 0xffff
     call        bufins
 
     movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], ebx
-    mov         [ebp-gap_end+eax*2], edx
+    mov         [ebp-gap_start+eax*2], bx
+    mov         [ebp-gap_end+eax*2], dx
     popa
 
     jmp         .refreshScreen
+
+;;;;;;;;;;;;;;;;;;;
+;  Key modifiers  ;
+;;;;;;;;;;;;;;;;;;;
+
 .special:
-    cmp         edx, 1
+    cmp         dl, SHIFT_STATE
     jne         .shortcut
 
     pusha
@@ -290,20 +338,81 @@ FRESH_STATE     equ 0xffff
     call        bufins
 
     movzx       eax, word [ebp-current_tab]
-    mov         [ebp-gap_start+eax*2], ebx
-    mov         [ebp-gap_end+eax*2], edx
+    mov         [ebp-gap_start+eax*2], bx
+    mov         [ebp-gap_end+eax*2], dx
     popa
 
     jmp         .refreshScreen
+
+;;;;;;;;;;;;;;;;
+;  Shortcuts  ;
+;;;;;;;;;;;;;;;;
+
 .shortcut:
+    cmp         al, 0x8f
+    jne         .shortcut_done
+    cmp         dl, CTRL_STATE
+    jne         .backward_tab_switch
+; forward tab switch
+    ; save tab state
+    push        eax
+    push        esi
+    movzx       eax, word [ebp-current_tab]
+    lea         esi, [ebp-tab_state]
+    mov         [esi+eax], dh
+    pop         esi
+    pop         eax
+
+    ; switch tab
     pusha
-    call        shortcut_action
+    movzx       eax, word [ebp-current_tab]
+    xor         edx, edx
+    call        change_tab
+    mov         [ebp-current_tab], ax
     popa
 
+    ; restore tab state
+    push        eax
+    push        esi
+    movzx       eax, word [ebp-current_tab]
+    lea         esi, [ebp-tab_state]
+    mov         dh, [esi+eax]
+    pop         esi
+    pop         eax
+    jmp         .shortcut_done
+.backward_tab_switch:
+    ; save tab state
+    push        eax
+    push        esi
+    movzx       eax, word [ebp-current_tab]
+    lea         esi, [ebp-tab_state]
+    mov         [esi+eax], dh
+    pop         esi
+    pop         eax
+
+    ; switch tab
+    pusha
+    movzx       eax, word [ebp-current_tab]
+    mov         edx, 1
+    call        change_tab
+    mov         [ebp-current_tab], ax
+    popa
+
+    ; restore tab state
+    push        eax
+    push        esi
+    movzx       eax, word [ebp-current_tab]
+    lea         esi, [ebp-tab_state]
+    mov         dh, [esi+eax]
+    pop         esi
+    pop         eax
+    jmp         .shortcut_done
+
+.shortcut_done:
     jmp         .refreshScreen
 
 .reset:
-    xor         edx, edx
+    xor         dl, dl
 .refreshScreen:
     pusha
 
@@ -342,14 +451,21 @@ navigate:
 ;Output
 ;  ebx = final gap start offset
 ;  edx = final gap end offset
+    enter       0, 16
+    ; offsets
+.current:       equ 4
+.target:        equ .current + 4
+.exists:        equ .target + 1
+
+
     and         al, 0x7f    ; make sure it is a make code
 
     cmp         al, 0x4b    ; LEFT
     jne         .right
-    ; if the cursor is on the begining of the buffer
+    ; if the cursor is on the beginning of the buffer
     ; do nothing
     or          ebx, ebx
-    jle         .done
+    je          .done
     ; otherwise, shift the gap to the left
     dec         ebx
     dec         edx
@@ -373,13 +489,108 @@ navigate:
     mov         [edi+ebx], al
     inc         ebx
     inc         edx
+    jmp         .done
 .up:
+    cmp         al, 0x48    ; UP
+    jne         .down
+
+    pusha
+    call        previousline
+    mov         [ebp-.target], ecx
+    mov         [ebp-.exists], al
+    popa
+
+    cmp         byte [ebp-.exists], 0
+    jz          .done
+
+    pusha
+    call        lineoffset
+    mov         [ebp-.current], ecx
+    popa
+
+    pusha
+    mov         eax, [ebp-.target]
+    mov         ecx, BUFFER_SIZE
+    call        linelen
+
+    cmp         ecx, [ebp-.current]
+    jl          .up_cutoff
+    mov         eax, [ebp-.current]
+    add         [ebp-.target], eax
+    jmp         .move_up
+.up_cutoff:
+    add         [ebp-.target], ecx
+.move_up:
+    popa
+
+
+    mov         eax, [ebp-.target]
+    call        movegap
+    jmp         .done
+
+.down:
+    cmp         al, 0x50    ; DOWN
+    jne         .done
+
+    pusha
+    mov         ecx, BUFFER_SIZE
+    call        nextline
+    mov         [ebp-.target], ecx
+    mov         [ebp-.exists], al
+    popa
+
+    cmp         byte [ebp-.exists], 0
+    jz          .done
+
+    pusha
+    call        lineoffset
+    mov         [ebp-.current], ecx
+    popa
+
+    pusha
+    mov         eax, [ebp-.target]
+    mov         ecx, BUFFER_SIZE
+    call        linelen
+    cmp         ecx, [ebp-.current]
+    jl          .down_cutoff
+    mov         eax, [ebp-.current]
+    add         [ebp-.target], eax
+    jmp         .move_down
+.down_cutoff:
+    add         [ebp-.target], ecx
+.move_down:
+    popa
+
+
+    mov         eax, [ebp-.target]
+    call        movegap
 .done:
+    leave
     ret
 
-shortcut_action:
-    ; al contains the scan code of the key pressed along with ctrl
-    ; edi is already set tot the current position of the cursor, DON'T CHANGE IT
+change_tab:
+;Parameters
+;  eax = current tab
+;  dl = 0 to go to the next tab, 1 for the previous one
+;Output
+;  eax = final tab
+    or          edx, edx
+    jnz         .backward
+    cmp         eax, MAX_NUM_TABS-1
+    je          .goto_first
+    inc         eax
+    jmp         .done
+.goto_first:
+    xor         eax, eax
+    jmp         .done
+.backward:
+    or          eax, eax
+    jz          .goto_last
+    dec         eax
+    jmp         .done
+.goto_last:
+    mov         eax, MAX_NUM_TABS-1
+.done:
     ret
 
     times   (0x400000 - ($ - $$ - 0x200)) db 0
