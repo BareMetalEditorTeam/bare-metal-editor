@@ -357,7 +357,7 @@ FRESH_TAB_STATE equ 1
     ; save tab state
     push        eax
     push        esi
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     lea         esi, [ebp-tab_state]
     mov         [esi+eax], dh
     pop         esi
@@ -365,16 +365,16 @@ FRESH_TAB_STATE equ 1
 
     ; switch tab
     pusha
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     xor         edx, edx
     call        change_tab
-    mov         [ebp-current_tab], ax
+    mov         [ebp-current_tab], eax
     popa
 
     ; restore tab state
     push        eax
     push        esi
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     lea         esi, [ebp-tab_state]
     mov         dh, [esi+eax]
     pop         esi
@@ -384,7 +384,7 @@ FRESH_TAB_STATE equ 1
     ; save tab state
     push        eax
     push        esi
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     lea         esi, [ebp-tab_state]
     mov         [esi+eax], dh
     pop         esi
@@ -392,16 +392,16 @@ FRESH_TAB_STATE equ 1
 
     ; switch tab
     pusha
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     mov         edx, 1
     call        change_tab
-    mov         [ebp-current_tab], ax
+    mov         [ebp-current_tab], eax
     popa
 
     ; restore tab state
     push        eax
     push        esi
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     lea         esi, [ebp-tab_state]
     mov         dh, [esi+eax]
     pop         esi
@@ -420,7 +420,7 @@ FRESH_TAB_STATE equ 1
 
     ; buffer params
     lea         esi, [ebp-buffers]
-    movzx       eax, word [ebp-current_tab]
+    mov         eax, [ebp-current_tab]
     mov         ecx, BUFFER_SIZE
     mul         ecx
     add         esi, eax
@@ -428,9 +428,9 @@ FRESH_TAB_STATE equ 1
     mov         ecx, BUFFER_SIZE
 
     ; gap parameters
-    movzx       eax, word [ebp-current_tab]
-    movzx       ebx, word [ebp-gap_start+eax*2]
-    movzx       edx, word [ebp-gap_end+eax*2]
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
 
     call        bufprint
 
