@@ -45,7 +45,7 @@ load_gdt:
     int     0x13
 
     mov     ax, [blk_count]
-    cmp     ax, 1
+    cmp     ax, 4
     jl      short error
 
     ; enable protected mode
