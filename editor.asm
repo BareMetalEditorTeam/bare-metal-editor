@@ -6,7 +6,7 @@
 %include "utils.inc"
 
 MAX_NUM_TABS    equ 10
-BUFFER_SIZE     equ 1024 ; in bytes
+BUFFER_SIZE     equ 2000 ; in bytes
 TOTAL_BUFFERS   equ MAX_NUM_TABS*BUFFER_SIZE
 
 ; colors

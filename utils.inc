@@ -51,7 +51,13 @@ putch:
 ;Output
 ;  bh = final y coordinate
 ;  bl = final x coordinate
+    
+    cmp     bh, LINES-1
+    jl      .print
+    cmp     bl, COLS
+    jge     .done
 
+.print:
     push    ebx ; save coordinates
     push    eax ; save data
 
@@ -89,6 +95,8 @@ putch:
 .linefeed:
     pop     ebx ; restore coordinates
 .newline:
+    cmp     bh, LINES-1
+    je      .done
     xor     bl, bl
     inc     bh
     jmp     .done
@@ -267,6 +275,7 @@ moveCur:
     mov     al, bh
     mul     ecx
     add     al, bl
+    adc     ah, 0
     mov     ebx, eax
 
     ; write the low byte
