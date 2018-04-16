@@ -546,14 +546,15 @@ FRESH_TAB_STATE equ 1
     mov         ebx, [ebp-gap_start+eax*4]
     mov         edx, [ebp-gap_end+eax*4]
 
-    mov         ecx, BUFFER_SIZE
 
     cmp         dword [ebp-select_start], BUFFER_SIZE
     je          .direct_paste
 
     ; delete selection first
-    mov         eax, [ebp-select_start]
-    mov         ecx, [ebp-select_end]
+    mov         esi, [ebp-select_start]
+    mov         eax, [ebp-select_end]
+
+    mov         ecx, BUFFER_SIZE
 
     push        edi
     push        ecx
