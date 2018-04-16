@@ -127,6 +127,27 @@ FRESH_TAB_STATE equ 1
     ; Get the scan code of the key
     xor         eax, eax
     in          al, 0x60
+    ; Map cursor scan codes to arrows
+    cmp         al, 0xe0
+    jne         .make_or_break
+
+    in          al, 0x60
+
+    cmp         al, 0x48 ; cursor up
+    jne         .cursor_left
+    jmp         .make_or_break
+.cursor_left:
+    cmp         al, 0x4B
+    jne         .cursor_right
+    jmp         .make_or_break
+.cursor_right:
+    cmp         al, 0x4D
+    jne         .cursor_down
+    jmp         .make_or_break
+.cursor_down:
+    cmp         al, 0x50
+    jne         .finish_loop
+.make_or_break:
 ; check if its a make code or a break code
     test        al, 0x80
     jnz         .break_code
