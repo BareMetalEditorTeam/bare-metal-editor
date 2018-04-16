@@ -18,7 +18,8 @@ bits 32
 scanCodeToASCII:
 ;Parameters
 ;  al = scan code of a character
-;  cl = 1 for alternate code, 0 for default
+;  cl = 1 if shift pressed, 0 otherwise
+;  ch = 1 if caps lock is on, 0 otherwise
 ;Output
 ;  al = ASCII code
     jmp     .start
@@ -36,6 +37,28 @@ scanCodeToASCII:
     mov     ebx, .lowercaseScanCodeTable
 .getcharacter:
     xlatb
+    ; if caps lock is not pressed, done
+    or      ch, ch
+    jz      .done
+    ; if caps lock is pressed and shift is not
+    ; change to uppercase letters
+    or      cl, cl
+    jnz     .small
+    cmp     al, 'a'
+    jl      .done
+    cmp     al, 'z'
+    jg      .done
+    sub     al, 0x20
+    jmp     .done
+.small:
+    ; if both caps lock and shift are pressed
+    ; change to lowercase letters
+    cmp     al, 'A'
+    jl      .done
+    cmp     al, 'Z'
+    jg      .done
+    add     al, 0x20
+.done:
     ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -584,7 +607,7 @@ linelen:
     jg      .postgap_loop
 
 
-    push    eax ; save the line start offset 
+    push    eax ; save the line start offset
 
     ; move to the start of the line
     add     edi, eax

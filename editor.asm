@@ -51,14 +51,14 @@ current_tab     equ tab_state + 4
     mov         edi, VIDMEM     ; VGA color text mode memory address
 
     ; Program State
-    ; dl = 0        previous scan code is a character
-CHARACTER_STATE equ 0
+    ; caps lock is on
+CAPS_STATE      equ 0b0001
     ; shift is pressed
-SHIFT_STATE     equ 1
+SHIFT_STATE     equ 0b0010
     ; ctrl is pressed
-CTRL_STATE      equ 2
+CTRL_STATE      equ 0b0100
     ; both shift and ctrl are pressed
-SHIFT_CTRL_STATE equ 3
+SHIFT_CTRL_STATE equ 0b1000
 
     ; Tab State
     ; old tab
@@ -134,29 +134,30 @@ FRESH_TAB_STATE equ 1
 ;; Left Shift
     cmp         al, 0x2A
     jne         .rshift
-    cmp         dl, CTRL_STATE
-    je          .shift_ctrl
-    mov         dl, SHIFT_STATE
+    or          dl, SHIFT_STATE
     jmp         .makecodes_done
 ;; Right Shift
 .rshift:
     cmp         al, 0x36
     jne         .ctrl
-    cmp         dl, CTRL_STATE
-    je          .shift_ctrl
-    mov         dl, SHIFT_STATE
+    or          dl, SHIFT_STATE
     jmp         .makecodes_done
 ;; Ctrl
 .ctrl:
     cmp         al, 0x1D
-    jne         .bkspace
-    cmp         dl, SHIFT_STATE
-    je          .shift_ctrl
-    mov         dl, CTRL_STATE
+    jne         .caps
+    or          dl, CTRL_STATE
     jmp         .makecodes_done
-
-.shift_ctrl:
-    mov         dl, SHIFT_CTRL_STATE
+;;CAPS LOCK:
+.caps:
+    cmp         al, 0x3A
+    jne         .bkspace
+    test        dl, CAPS_STATE
+    jz          .enable_caps
+    and         dl, ~CAPS_STATE
+    jmp         .makecodes_done
+.enable_caps:
+    or          dl, CAPS_STATE
     jmp         .makecodes_done
 
 ;; Backspace
@@ -284,55 +285,32 @@ FRESH_TAB_STATE equ 1
     cmp         al, 0x8E ; BKSP
     je          .finish_loop
     cmp         al, 0x9D ; CTRL
-    je          .reset
+    je          .reset_ctrl
     cmp         al, 0xAA ; LEFT SHIFT
-    je          .reset
+    je          .reset_shift
     cmp         al, 0xB6 ; RIGHT SHIFT
-    je          .reset
+    je          .reset_shift
     cmp         al, 0xB9 ; SPACE
     jg          .finish_loop
 ; It is a break code of a character
-    cmp         dl, CHARACTER_STATE
-    jnz         .special
+    test        dl, CTRL_STATE
+    jnz         .shortcut
     pusha
-    xor         cl, cl
-    call        scanCodeToASCII
 
-    push        eax
-
-    ; buffer params
-    lea         edi, [ebp-buffers]
-    mov         eax, [ebp-current_tab]
-    mov         ecx, BUFFER_SIZE
-    mul         ecx
-    add         edi, eax
-
-    ; gap parameters
-    mov         eax, [ebp-current_tab]
-    mov         ebx, [ebp-gap_start+eax*4]
-    mov         edx, [ebp-gap_end+eax*4]
-
-    pop         eax
-
-    call        bufins
-
-    mov         eax, [ebp-current_tab]
-    mov         [ebp-gap_start+eax*4], ebx
-    mov         [ebp-gap_end+eax*4], edx
-    popa
-
-    jmp         .refreshScreen
-
-;;;;;;;;;;;;;;;;;;;
-;  Key modifiers  ;
-;;;;;;;;;;;;;;;;;;;
-
-.special:
-    cmp         dl, SHIFT_STATE
-    jne         .shortcut
-
-    pusha
+    test        dl, CAPS_STATE
+    jz          .no_caps
+    mov         ch, 1
+    jmp         .check_shift
+.no_caps:
+    xor         ch, ch
+.check_shift:
+    test        dl, SHIFT_STATE
+    jz          .no_shift
     mov         cl, 1
+    jmp         .get_ascii
+.no_shift:
+    xor         cl, cl
+.get_ascii:
     call        scanCodeToASCII
 
     push        eax
@@ -367,8 +345,8 @@ FRESH_TAB_STATE equ 1
 .shortcut:
     cmp         al, 0x8f
     jne         .shortcut_done
-    cmp         dl, CTRL_STATE
-    jne         .backward_tab_switch
+    test        dl, SHIFT_STATE
+    jnz         .backward_tab_switch
 ; forward tab switch
     ; save tab state
     push        eax
@@ -427,8 +405,12 @@ FRESH_TAB_STATE equ 1
 .shortcut_done:
     jmp         .refreshScreen
 
-.reset:
-    xor         dl, dl
+.reset_shift:
+    and         dl, ~SHIFT_STATE
+    jmp         .finish_loop
+.reset_ctrl:
+    and         dl, ~CTRL_STATE
+    jmp         .finish_loop
 .refreshScreen:
     pusha
 
