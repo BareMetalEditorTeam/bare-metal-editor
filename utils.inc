@@ -379,6 +379,93 @@ bufins:
 .done:
     ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;  Insert a string before the cursor  ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+bufinss:
+;Parameters
+;  esi = the string
+;  ecx = the length of the string
+;  edi = buffer address
+;  edx = gap start offset
+;  ebx = gap end offset
+;Output
+;  ebx = final gap start offset
+;  edx = final gap end offset
+.loop:
+    lodsb
+    push    esi
+    push    ecx
+    push    edi
+    call    bufins
+    pop     edi
+    pop     ecx
+    pop     esi
+    loop    .loop
+    ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;  copy a string from a gap buffer to a regular buffer  ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+bufcpy:
+; the string should be right before the cursor,
+; right after the cursor or the whole buffer
+;Parameters
+;  esi = gap buffer address
+;  edi = destination buffer address
+;  ebx = gap start offset
+;  edx = gap end offset
+;  eax = string start offset
+;  ecx = string end offset
+;  first 4 bytes on the stack = buffer length
+;Output
+;  ecx = number of characters copied
+
+    cld
+
+    or      eax, eax
+    jnz     .before
+    cmp     ecx, [esp+4]
+    jne     .before
+
+    xor     eax, eax
+
+    push    esi
+    mov     ecx, ebx
+    add     eax, ecx
+    rep     movsb
+    pop     esi
+
+    mov     ecx, [esp+4]
+    sub     ecx, edx
+    add     esi, edx
+    add     eax, ecx
+    rep     movsb
+
+    mov     ecx, eax
+    jmp     .done
+
+.before:
+    cmp     eax, ebx
+    jg      .after
+
+    mov     ecx, ebx
+    push    ecx
+    rep     movsb
+    pop     ecx
+
+    jmp     .done
+.after:
+    add     esi, edx
+    sub     ecx, edx
+    push    ecx
+    rep     movsb
+    pop     ecx
+.done:
+    ret
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;  Delete a character before or after the cursor from a buffer  ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

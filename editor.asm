@@ -26,22 +26,26 @@ editor:
 
     ; setup a buffer for each tab
     sub         esp, TOTAL_BUFFERS  ; buffers
+    sub         esp, BUFFER_SIZE    ; clipboard
     sub         esp, MAX_NUM_TABS*4 ; gap start
     sub         esp, MAX_NUM_TABS*4 ; gap end
+    sub         esp, MAX_NUM_TABS   ; tab state
     sub         esp, 4              ; selection start
     sub         esp, 4              ; selection end
-    sub         esp, MAX_NUM_TABS   ; tab state
+    sub         esp, 4              ; clipboard length
     sub         esp, 4              ; current tab index
     and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
 
     ; stack variables offsets
 buffers         equ TOTAL_BUFFERS
-gap_start       equ MAX_NUM_TABS*4  + buffers
+clipboard       equ BUFFER_SIZE     + buffers
+gap_start       equ MAX_NUM_TABS*4  + clipboard
 gap_end         equ MAX_NUM_TABS*4  + gap_start
-select_start    equ 4               + gap_end
+tab_state       equ MAX_NUM_TABS    + gap_end
+select_start    equ 4               + tab_state
 select_end      equ 4               + select_start
-tab_state       equ MAX_NUM_TABS    + select_end
-current_tab     equ 4               + tab_state
+clipboard_len   equ 4               + select_end
+current_tab     equ 4               + clipboard_len
 
 
     ;;;;;;;;;;;;;;;;;;;;;;
@@ -122,7 +126,7 @@ FRESH_TAB_STATE equ 1
     ; Get the scan code of the key
     xor         eax, eax
     in          al, 0x60
-    ; Map cursor scan codes to arrows
+    ; Map cursor and multimedia scan codes to normal scan codes
     cmp         al, 0xe0
     jne         .make_or_break
 
@@ -141,6 +145,10 @@ FRESH_TAB_STATE equ 1
     jmp         .make_or_break
 .cursor_down:
     cmp         al, 0x50
+    jne         .del_key
+    jmp         .make_or_break
+.del_key:
+    cmp         al, 0x53
     jne         .finish_loop
 .make_or_break:
 ; check if its a make code or a break code
@@ -198,13 +206,25 @@ FRESH_TAB_STATE equ 1
     mov         ebx, [ebp-gap_start+eax*4]
     mov         edx, [ebp-gap_end+eax*4]
 
-    xor         eax, eax
+    cmp         dword [ebp-select_start], BUFFER_SIZE
+    je          .delete_prev
 
+    mov         esi, [ebp-select_start]
+    mov         eax, [ebp-select_end]
+    call        bufdels
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    mov         dword [ebp-select_end], BUFFER_SIZE
+    jmp         .bksp_done
+
+.delete_prev:
+    xor         eax, eax
     call        bufdel
 
+.bksp_done:
     mov         eax, [ebp-current_tab]
     mov         [ebp-gap_start+eax*4], ebx
     mov         [ebp-gap_end+eax*4], edx
+
     popa
     jmp         .refreshScreen
 .del:
@@ -228,10 +248,21 @@ FRESH_TAB_STATE equ 1
     mov         ebx, [ebp-gap_start+eax*4]
     mov         edx, [ebp-gap_end+eax*4]
 
-    mov         eax, 1
+    cmp         dword [ebp-select_start], BUFFER_SIZE
+    je          .delete_next
 
+    mov         esi, [ebp-select_start]
+    mov         eax, [ebp-select_end]
+    call        bufdels
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    mov         dword [ebp-select_end], BUFFER_SIZE
+    jmp         .del_done
+
+.delete_next:
+    mov         eax, 1
     call        bufdel
 
+.del_done:
     mov         eax, [ebp-current_tab]
     mov         [ebp-gap_start+eax*4], ebx
     mov         [ebp-gap_end+eax*4], edx
@@ -461,9 +492,84 @@ FRESH_TAB_STATE equ 1
 
 .select_all:
     cmp         al, 0x9e
-    jne         .shortcut_done
+    jne         .copy
     mov         dword [ebp-select_start], 0
     mov         dword [ebp-select_end], BUFFER_SIZE
+    jmp         .shortcut_done
+
+.copy:
+    cmp         al, 0xae
+    jne         .paste
+    cmp         dword [ebp-select_start], BUFFER_SIZE
+    je          .shortcut_done
+
+    pusha
+    ; buffer params
+    lea         esi, [ebp-buffers]
+    mov         eax, [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         esi, eax
+
+    ; gap parameters
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
+
+    lea         edi, [ebp-clipboard]
+
+    mov         eax, [ebp-select_start]
+    mov         ecx, [ebp-select_end]
+
+    call        copy_selection
+    mov         [ebp-clipboard_len], ecx
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    mov         dword [ebp-select_end], BUFFER_SIZE
+
+    popa
+    jmp         .shortcut_done
+
+.paste:
+    cmp         al, 0xaf
+    jne         .shortcut_done
+
+    pusha
+    ; buffer params
+    lea         edi, [ebp-buffers]
+    mov         eax, [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         edi, eax
+
+    ; gap parameters
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
+
+    mov         ecx, BUFFER_SIZE
+
+    cmp         dword [ebp-select_start], BUFFER_SIZE
+    je          .direct_paste
+
+    ; delete selection first
+    mov         eax, [ebp-select_start]
+    mov         ecx, [ebp-select_end]
+
+    push        edi
+    push        ecx
+    call        bufdels
+    pop         ecx
+    pop         edi
+
+.direct_paste:
+    lea         esi, [ebp-clipboard]
+    call        paste_selection
+
+    mov         eax, [ebp-current_tab]
+    mov         [ebp-gap_start+eax*4], ebx
+    mov         [ebp-gap_end+eax*4], edx
+    popa
+
     jmp         .shortcut_done
 
 .shortcut_done:
@@ -708,6 +814,34 @@ change_tab:
 .goto_last:
     mov         eax, MAX_NUM_TABS-1
 .done:
+    ret
+
+copy_selection:
+;Parameters
+;  esi = buffer address
+;  edi = destination buffer
+;  ebx = gap start offset
+;  edx = gap end offset
+;  eax = selection start offset
+;  ecx = selection end offset
+;Output
+;  ecx = number of characters copied
+    push    dword BUFFER_SIZE
+    call    bufcpy
+    add     esp, 4
+    ret
+
+paste_selection:
+;Paramters
+;  edi = buffer address
+;  esi = source buffer
+;  ebx = gap start offset
+;  edx = gap end offset
+;  ecx = selection length
+;Output
+;  ebx = final gap start offset
+;  edx = final gap end offset
+    call    bufinss
     ret
 
     times   (0x400000 - ($ - $$ - 0x200)) db 0
