@@ -185,7 +185,7 @@ bufprint:
 ;  bl = final x coordinate
 
     ; create a stack frame
-    enter   0, 12
+    enter   12, 0
 
     ; local variables stack offsets
 .y          equ 1
@@ -594,7 +594,7 @@ linelen:
 ;  edx = gap end offset
 ;Output
 ;  ecx = line length
-    enter   0, 8
+    enter   8, 0
     ; offset
 .len:       equ 4
 .n:         equ .len + 4

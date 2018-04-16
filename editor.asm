@@ -28,8 +28,8 @@ editor:
     sub         esp, TOTAL_BUFFERS  ; buffers
     sub         esp, MAX_NUM_TABS*4 ; gap start
     sub         esp, MAX_NUM_TABS*4 ; gap end
-    sub         esp, MAX_NUM_TABS*4 ; selection start
-    sub         esp, MAX_NUM_TABS*4 ; selection end
+    sub         esp, 4              ; selection start
+    sub         esp, 4              ; selection end
     sub         esp, MAX_NUM_TABS   ; tab state
     sub         esp, 4              ; current tab index
     and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
@@ -38,8 +38,8 @@ editor:
 buffers         equ TOTAL_BUFFERS
 gap_start       equ MAX_NUM_TABS*4  + buffers
 gap_end         equ MAX_NUM_TABS*4  + gap_start
-select_start    equ MAX_NUM_TABS*4  + gap_end
-select_end      equ MAX_NUM_TABS*4  + select_start
+select_start    equ 4               + gap_end
+select_end      equ 4               + select_start
 tab_state       equ MAX_NUM_TABS    + select_end
 current_tab     equ 4               + tab_state
 
@@ -73,32 +73,27 @@ FRESH_TAB_STATE equ 1
     mov         dh, FRESH_TAB_STATE
 
     ; Initialize variables
-    ; gap start array
     cld
+    ; gap start array
     lea         edi, [ebp-gap_start]
     xor         eax, eax
     mov         ecx, MAX_NUM_TABS
     rep         stosd
     ; gap end array
-    cld
     lea         edi, [ebp-gap_end]
     mov         ax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
     rep         stosd
     ; select start array
-    cld
     lea         edi, [ebp-select_start]
     mov         ax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
     rep         stosd
     ; select end array
-    cld
     lea         edi, [ebp-select_end]
-    mov         ax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
     rep         stosd
     ; tab state array
-    cld
     lea         edi, [ebp-tab_state]
     mov         al, 0x01
     mov         ecx, MAX_NUM_TABS
@@ -258,6 +253,7 @@ FRESH_TAB_STATE equ 1
     jne         .character
 .nav:
     pusha
+    push        edx ; save state
     push        eax ; save arrow scan code
 
     ; buffer params
@@ -274,12 +270,31 @@ FRESH_TAB_STATE equ 1
 
     pop         eax
 
+    mov         esi, [ebp-select_start]
+    mov         ecx, [ebp-select_end]
+
     call        navigate
 
     mov         eax, [ebp-current_tab]
     mov         [ebp-gap_start+eax*4], ebx
     mov         [ebp-gap_end+eax*4], edx
 
+    ; restore state
+    pop         edx
+    ; change selection with shift
+    test        dl, SHIFT_STATE
+    jz          .no_selection
+
+    cmp         esi, ecx
+    je          .no_selection
+
+    mov         [ebp-select_start], esi
+    mov         [ebp-select_end], ecx
+    jmp         .nav_done
+.no_selection:
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    mov         dword [ebp-select_end], BUFFER_SIZE
+.nav_done:
     popa
 
     jmp         .refreshScreen
@@ -366,6 +381,9 @@ FRESH_TAB_STATE equ 1
 .shortcut:
     cmp         al, 0x8f
     jne         .shortcut_done
+    ; reset selection on tab switch
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    mov         dword [ebp-select_end], BUFFER_SIZE
     test        dl, SHIFT_STATE
     jnz         .backward_tab_switch
 ; forward tab switch
@@ -452,8 +470,8 @@ FRESH_TAB_STATE equ 1
     mov         edx, [ebp-gap_end+eax*4]
 
     ; select paramters
-    mov         edi, [ebp-select_start+eax*4]
-    mov         eax, [ebp-select_end+eax*4]
+    mov         edi, [ebp-select_start]
+    mov         eax, [ebp-select_end]
 
     call        bufprint
 
@@ -471,30 +489,45 @@ navigate:
 ;  edi = current tab buffer
 ;  ebx = gap start offset
 ;  edx = gap end offset
+;  esi = selection start offset
+;  ecx = selection end offset
 ;Output
 ;  ebx = final gap start offset
 ;  edx = final gap end offset
-    enter       0, 16
+;  esi = final selection start offset
+;  ecx = final selection end offset
+    enter       32, 0
     ; offsets
 .current:       equ 4
 .target:        equ 4 + .current
 .exists:        equ 1 + .target
 
+.gap_start:     equ 4 + .exists
+.gap_end:       equ 4 + .gap_start
+.sel_start:     equ 4 + .gap_end
+.sel_end:       equ 4 + .sel_start
+
 
     and         al, 0x7f    ; make sure it is a make code
+    ; save old gap start and end offsets
+    mov         [ebp-.gap_start], ebx
+    mov         [ebp-.gap_end], edx
+    ; save old seletion start and offsets
+    mov         [ebp-.sel_start], esi
+    mov         [ebp-.sel_end], ecx
 
     cmp         al, 0x4b    ; LEFT
     jne         .right
     ; if the cursor is on the beginning of the buffer
     ; do nothing
     or          ebx, ebx
-    je          .done
+    je          .update_selection
     ; otherwise, shift the gap to the left
     dec         ebx
     dec         edx
     mov         al, [edi+ebx]
     mov         [edi+edx], al
-    jmp         .done
+    jmp         .update_selection
 
 .right:
     cmp         al, 0x4d    ; RIGHT
@@ -504,13 +537,13 @@ navigate:
     ; or if there are no characters after the cursor
     ; do nothing
     cmp         edx, BUFFER_SIZE
-    je          .done
+    je          .update_selection
     ; otherwise, shift the gap to the right
     mov         al, [edi+edx]
     mov         [edi+ebx], al
     inc         ebx
     inc         edx
-    jmp         .done
+    jmp         .update_selection
 .up:
     cmp         al, 0x48    ; UP
     jne         .down
@@ -523,7 +556,7 @@ navigate:
     popa
 
     cmp         byte [ebp-.exists], 0
-    jz          .done
+    jz          .update_selection
 
     pusha
     call        lineoffset
@@ -549,11 +582,11 @@ navigate:
 
     mov         eax, [ebp-.target]
     call        movegap
-    jmp         .done
+    jmp         .update_selection
 
 .down:
     cmp         al, 0x50    ; DOWN
-    jne         .done
+    jne         .update_selection
 
     pusha
     mov         ecx, BUFFER_SIZE
@@ -563,7 +596,7 @@ navigate:
     popa
 
     cmp         byte [ebp-.exists], 0
-    jz          .done
+    jz          .update_selection
 
     pusha
     call        lineoffset
@@ -588,6 +621,41 @@ navigate:
 
     mov         eax, [ebp-.target]
     call        movegap
+
+.update_selection:
+    cmp         ebx, [ebp-.gap_start]
+    jl          .left
+; right
+    cmp         dword [ebp-.sel_start], BUFFER_SIZE
+    je          .new_right_selection
+    mov         eax, [ebp-.sel_end]
+    cmp         eax, [ebp-.gap_start]
+    je          .continue_right_selection
+
+    mov         esi, edx
+    jmp         .done
+.new_right_selection:
+    mov         ecx, ebx
+    mov         esi, [ebp-.gap_start]
+    jmp         .done
+.continue_right_selection:
+    mov         ecx, ebx
+    jmp         .done
+.left:
+    cmp         dword [ebp-.sel_start], BUFFER_SIZE
+    je          .new_left_selection
+    mov         eax, [ebp-.sel_start]
+    cmp         eax, [ebp-.gap_end]
+    je          .continue_left_selection
+
+    mov         ecx, ebx
+    jmp         .done
+.new_left_selection:
+    mov         esi, edx
+    mov         ecx, [ebp-.gap_end]
+    jmp         .done
+.continue_left_selection:
+    mov         esi, edx
 .done:
     leave
     ret

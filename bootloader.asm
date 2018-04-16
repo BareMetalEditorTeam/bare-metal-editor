@@ -45,7 +45,7 @@ load_gdt:
     int     0x13
 
     mov     ax, [blk_count]
-    cmp     ax, 4
+    cmp     ax, 6
     jl      short error
 
     ; enable protected mode
@@ -102,7 +102,7 @@ DPACK:
     db      0x10
     db      0x00
 blk_count:
-    dw      4
+    dw      6
 buffer_address:
     dw      0x1000
     dw      0x0000
