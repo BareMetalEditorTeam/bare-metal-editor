@@ -411,6 +411,41 @@ bufdel:
 .done:
     ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;  Delete a section from the buffer  ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+bufdels:
+; The section has to be right before the cursor,
+; right after the cursor or the whole buffer
+;Parameters
+;  edi = buffer address
+;  ecx = buffer size
+;  ebx = gap start offset
+;  edx = gap end offset
+;  esi = section start offset
+;  eax = section end offset
+;Output
+;  ebx = final gap start offset
+;  edx = final gap end offset
+    or      esi, esi
+    jnz     .before
+    cmp     eax, ecx
+    jne     .before
+    xor     ebx, ebx
+    mov     edx, ecx
+    jmp     .done
+
+.before:
+    cmp     esi, ebx
+    jge     .after
+    mov     ebx, esi
+    jmp     .done
+.after:
+    mov     edx, eax
+.done:
+    ret
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;  Move the gap so that it starts at a specific offset  ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

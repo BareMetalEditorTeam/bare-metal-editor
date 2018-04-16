@@ -358,11 +358,29 @@ FRESH_TAB_STATE equ 1
     mul         ecx
     add         edi, eax
 
+    ; save buffer start
+    push        edi
+
     ; gap parameters
     mov         eax, [ebp-current_tab]
     mov         ebx, [ebp-gap_start+eax*4]
     mov         edx, [ebp-gap_end+eax*4]
 
+    cmp         dword [ebp-select_start], BUFFER_SIZE
+    je          .direct_print
+
+    mov         esi, [ebp-select_start]
+    mov         eax, [ebp-select_end]
+    mov         ecx, BUFFER_SIZE
+
+    call        bufdels
+
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    mov         dword [ebp-select_end], BUFFER_SIZE
+
+
+.direct_print:
+    pop         edi
     pop         eax
 
     call        bufins
@@ -380,7 +398,7 @@ FRESH_TAB_STATE equ 1
 
 .shortcut:
     cmp         al, 0x8f
-    jne         .shortcut_done
+    jne         .select_all
     ; reset selection on tab switch
     mov         dword [ebp-select_start], BUFFER_SIZE
     mov         dword [ebp-select_end], BUFFER_SIZE
@@ -439,6 +457,13 @@ FRESH_TAB_STATE equ 1
     mov         dh, [esi+eax]
     pop         esi
     pop         eax
+    jmp         .shortcut_done
+
+.select_all:
+    cmp         al, 0x9e
+    jne         .shortcut_done
+    mov         dword [ebp-select_start], 0
+    mov         dword [ebp-select_end], BUFFER_SIZE
     jmp         .shortcut_done
 
 .shortcut_done:
