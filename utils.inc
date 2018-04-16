@@ -155,34 +155,48 @@ bufprint:
 ;  ecx = buffer length
 ;  ebx = gap start offset
 ;  edx = gap end offset
+;  edi = selection start offset
+;  eax = selection end offset
 ;Output
 ;  bh = final y coordinate
 ;  bl = final x coordinate
-;  eax = page end offset
 
     ; create a stack frame
-    push    ebp
-    mov     ebp, esp
-    sub     esp, 4
+    enter   0, 12
 
     ; local variables stack offsets
 .y          equ 1
 .x          equ 2
 .tempX      equ 3
 .tempY      equ 4
+.sel_start  equ .tempY + 4
+.sel_end    equ .sel_start + 4
 
     push    ecx ; save buffer length
+    ; save selection offset
+    mov     [ebp-.sel_start], edi
+    mov     [ebp-.sel_end], eax
 
-    mov     ah, WHITE_ON_BLACK
-    mov     ecx, ebx
+    xor     ecx, ecx
 
     mov     byte [ebp-.x], 0
     mov     byte [ebp-.y], 0
 
 .pregap_loop:
-    or      ecx, ecx
-    jle     .postgap
+    cmp     ecx, ebx
+    je      .postgap
 
+    cmp     ecx, [ebp-.sel_start]
+    jl      .pregap_normal_text
+    cmp     ecx, [ebp-.sel_end]
+    jge     .pregap_normal_text
+    mov     ah, BLACK_ON_WHITE
+    jmp     .pregap_print
+
+.pregap_normal_text:
+    mov     ah, WHITE_ON_BLACK
+
+.pregap_print:
     lodsb
 
     pusha
@@ -203,7 +217,7 @@ bufprint:
     je      .done
 
 .pregap_continue:
-    dec     ecx
+    inc     ecx
     jmp     .pregap_loop
 
 .postgap:
@@ -217,12 +231,22 @@ bufprint:
     mov     [ebp-.tempX], cl
 
     pop     ecx
-    push    ecx
-    sub     ecx, edx
 
 .postgap_loop:
-    or      ecx, ecx
-    jle     .done
+    cmp     edx, ecx
+    jge     .done
+
+    cmp     edx, [ebp-.sel_start]
+    jl      .postgap_normal_text
+    cmp     edx, [ebp-.sel_end]
+    jge     .postgap_normal_text
+    mov     ah, BLACK_ON_WHITE
+    jmp     .postgap_print
+
+.postgap_normal_text:
+    mov     ah, WHITE_ON_BLACK
+
+.postgap_print:
 
     lodsb
 
@@ -242,14 +266,10 @@ bufprint:
     cmp     byte [ebp-.tempX], COLS
     je      .done
 .postgap_continue:
-    dec     ecx
+    inc     edx
     jmp     .postgap_loop
 
 .done:
-    pop     eax
-    sub     eax, edx
-    sub     eax, ecx
-
     mov     bh, [ebp-.y]
     mov     bl, [ebp-.x]
 
@@ -257,8 +277,7 @@ bufprint:
     call    moveCur
     pop     ebx
 
-    mov     esp, ebp
-    pop     ebp
+    leave
     ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
