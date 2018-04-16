@@ -499,7 +499,7 @@ FRESH_TAB_STATE equ 1
 
 .copy:
     cmp         al, 0xae
-    jne         .paste
+    jne         .cut
     cmp         dword [ebp-select_start], BUFFER_SIZE
     je          .shortcut_done
 
@@ -523,6 +523,57 @@ FRESH_TAB_STATE equ 1
 
     call        copy_selection
     mov         [ebp-clipboard_len], ecx
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    mov         dword [ebp-select_end], BUFFER_SIZE
+
+    popa
+    jmp         .shortcut_done
+
+.cut:
+    cmp         al, 0xad
+    jne         .paste
+    cmp         dword [ebp-select_start], BUFFER_SIZE
+    je          .shortcut_done
+
+    pusha
+    ; buffer params
+    lea         esi, [ebp-buffers]
+    mov         eax, [ebp-current_tab]
+    mov         ecx, BUFFER_SIZE
+    mul         ecx
+    add         esi, eax
+
+    ; gap parameters
+    mov         eax, [ebp-current_tab]
+    mov         ebx, [ebp-gap_start+eax*4]
+    mov         edx, [ebp-gap_end+eax*4]
+
+    lea         edi, [ebp-clipboard]
+
+    mov         eax, [ebp-select_start]
+    mov         ecx, [ebp-select_end]
+
+    push        ecx
+    push        eax
+    push        edx
+    push        ebx
+    push        esi
+    ; first copy, then delete selection
+    call        copy_selection
+    mov         [ebp-clipboard_len], ecx
+
+    pop         edi
+    pop         ebx
+    pop         edx
+    pop         esi
+    pop         eax
+    mov         ecx, BUFFER_SIZE
+    call        bufdels
+
+    mov         eax, [ebp-current_tab]
+    mov         [ebp-gap_start+eax*4], ebx
+    mov         [ebp-gap_end+eax*4], edx
+
     mov         dword [ebp-select_start], BUFFER_SIZE
     mov         dword [ebp-select_end], BUFFER_SIZE
 
