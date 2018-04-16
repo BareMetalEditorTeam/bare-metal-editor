@@ -24,9 +24,9 @@ scanCodeToASCII:
 ;  al = ASCII code
     jmp     .start
 .uppercaseScanCodeTable:
-    db "//!@#$%^&*()-=/",0x09,"QWERTYUIOP[]",0x0a,"/ASDFGHJKL;",0x22,"`/|ZXCVBNM<>?/// /"
+    db "//!@#$%^&*()_=/",0x09,"QWERTYUIOP[]",0x0a,"/ASDFGHJKL:",0x22,"`/|ZXCVBNM<>?/// /"
 .lowercaseScanCodeTable:
-    db "//1234567890_+/",0x09,"qwertyuiop{}",0x0a,"/asdfghjkl:",0x27,"~/\zxcvbnm,.//// /"
+    db "//1234567890-+/",0x09,"qwertyuiop{}",0x0a,"/asdfghjkl;",0x27,"~/\zxcvbnm,.//// /"
 .start:
     and     al, 0x7f
     or      cl, cl
