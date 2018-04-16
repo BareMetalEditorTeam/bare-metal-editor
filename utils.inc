@@ -189,11 +189,11 @@ bufprint:
 
     ; local variables stack offsets
 .y          equ 1
-.x          equ 2
-.tempX      equ 3
-.tempY      equ 4
-.sel_start  equ .tempY + 4
-.sel_end    equ .sel_start + 4
+.x          equ 1 + .y
+.tempX      equ 1 + .x
+.tempY      equ 1 + .tempX
+.sel_start  equ 4 + .tempY
+.sel_end    equ 4 + .sel_start
 
     push    ecx ; save buffer length
     ; save selection offset

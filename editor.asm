@@ -36,12 +36,12 @@ editor:
 
     ; stack variables offsets
 buffers         equ TOTAL_BUFFERS
-gap_start       equ buffers + MAX_NUM_TABS*4
-gap_end         equ gap_start + MAX_NUM_TABS*4
-select_start    equ gap_end + MAX_NUM_TABS*4
-select_end      equ select_start + MAX_NUM_TABS*4
-tab_state       equ select_end + MAX_NUM_TABS
-current_tab     equ tab_state + 4
+gap_start       equ MAX_NUM_TABS*4  + buffers
+gap_end         equ MAX_NUM_TABS*4  + gap_start
+select_start    equ MAX_NUM_TABS*4  + gap_end
+select_end      equ MAX_NUM_TABS*4  + select_start
+tab_state       equ MAX_NUM_TABS    + select_end
+current_tab     equ 4               + tab_state
 
 
     ;;;;;;;;;;;;;;;;;;;;;;
@@ -477,8 +477,8 @@ navigate:
     enter       0, 16
     ; offsets
 .current:       equ 4
-.target:        equ .current + 4
-.exists:        equ .target + 1
+.target:        equ 4 + .current
+.exists:        equ 1 + .target
 
 
     and         al, 0x7f    ; make sure it is a make code
