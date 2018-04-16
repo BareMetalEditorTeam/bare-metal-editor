@@ -26,10 +26,10 @@ editor:
 
     ; setup a buffer for each tab
     sub         esp, TOTAL_BUFFERS  ; buffers
-    sub         esp, BUFFER_SIZE    ; clipboard
     sub         esp, MAX_NUM_TABS*4 ; gap start
     sub         esp, MAX_NUM_TABS*4 ; gap end
     sub         esp, MAX_NUM_TABS   ; tab state
+    sub         esp, BUFFER_SIZE    ; clipboard
     sub         esp, 4              ; selection start
     sub         esp, 4              ; selection end
     sub         esp, 4              ; clipboard length
@@ -38,11 +38,11 @@ editor:
 
     ; stack variables offsets
 buffers         equ TOTAL_BUFFERS
-clipboard       equ BUFFER_SIZE     + buffers
-gap_start       equ MAX_NUM_TABS*4  + clipboard
+gap_start       equ MAX_NUM_TABS*4  + buffers
 gap_end         equ MAX_NUM_TABS*4  + gap_start
 tab_state       equ MAX_NUM_TABS    + gap_end
-select_start    equ 4               + tab_state
+clipboard       equ BUFFER_SIZE     + tab_state
+select_start    equ 4               + clipboard
 select_end      equ 4               + select_start
 clipboard_len   equ 4               + select_end
 current_tab     equ 4               + clipboard_len
@@ -85,12 +85,12 @@ FRESH_TAB_STATE equ 1
     rep         stosd
     ; gap end array
     lea         edi, [ebp-gap_end]
-    mov         ax, BUFFER_SIZE
+    mov         eax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
     rep         stosd
     ; select start array
     lea         edi, [ebp-select_start]
-    mov         ax, BUFFER_SIZE
+    mov         eax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
     rep         stosd
     ; select end array
@@ -563,6 +563,7 @@ FRESH_TAB_STATE equ 1
 
 .direct_paste:
     lea         esi, [ebp-clipboard]
+    mov         ecx, [ebp-clipboard_len]
     call        paste_selection
 
     mov         eax, [ebp-current_tab]
