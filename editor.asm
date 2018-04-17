@@ -88,15 +88,10 @@ FRESH_TAB_STATE equ 1
     mov         eax, BUFFER_SIZE
     mov         ecx, MAX_NUM_TABS
     rep         stosd
-    ; select start array
-    lea         edi, [ebp-select_start]
-    mov         eax, BUFFER_SIZE
-    mov         ecx, MAX_NUM_TABS
-    rep         stosd
-    ; select end array
-    lea         edi, [ebp-select_end]
-    mov         ecx, MAX_NUM_TABS
-    rep         stosd
+    ; select start
+    mov         dword [ebp-select_start], BUFFER_SIZE
+    ; select end
+    mov         dword [ebp-select_end], BUFFER_SIZE
     ; tab state array
     lea         edi, [ebp-tab_state]
     mov         al, 0x01
@@ -358,7 +353,7 @@ FRESH_TAB_STATE equ 1
     cmp         al, 0xB6 ; RIGHT SHIFT
     je          .reset_shift
     cmp         al, 0xB9 ; SPACE
-    jg          .finish_loop
+    ja          .finish_loop
 ; It is a break code of a character
     test        dl, CTRL_STATE
     jnz         .shortcut
