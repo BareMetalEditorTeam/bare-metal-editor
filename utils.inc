@@ -1,13 +1,15 @@
 %ifndef __UTILS_INC_ICLUDED
 %define __UTILS_INC_ICLUDED
 
-%define VIDMEM  0xb8000
-%define COLS    80
-%define LINES   24
+%define VIDMEM      0xb8000
+%define COLS        80
+%define LINES       25
+%define TEXT_LINES  24
+%define STATUS_LINE 25
 
-%define WHITE_ON_BLACK 0x0f
-%define BLACK_ON_WHITE 0xf0
-%define GREY_ON_BLACK 0x07
+%define WHITE_ON_BLACK  0x0f
+%define BLACK_ON_GREY   0x70
+%define GREY_ON_BLACK   0x07
 
 bits 32
 
@@ -168,6 +170,56 @@ puts:
 .done:
     ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;  Prints a double word unsigned integer to the screen  ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+putdw:
+;Parameters
+;  eax = the number
+;  ch = character attribute
+;  bh = start y coordinate
+;  bl = start x coordinate
+;Output
+;  bh = final y coordinate
+;  bl = final x coordinate
+    jmp     .start
+    ; maximum number of digits = 10
+    ; and a null terminator
+.str:       times   11 db 0x00
+.len:       equ     10
+
+.start:
+    push    ecx
+    push    ebx
+
+    mov     ecx, .len
+    mov     ebx, 10
+.loop:
+    or      eax, eax
+    jz      .print
+    xor     edx, edx
+    div     ebx
+    add     dl, 0x30
+    mov     [.str+ecx-1], dl
+    dec     ecx
+    jmp     .loop
+
+.print:
+    cmp     ecx, .len
+    je      .zero
+    lea     esi, [.str+ecx]
+    jmp     .done
+.zero:
+    dec     esi
+    mov     byte [esi], '0'
+.done:
+    pop     ebx
+    pop     ecx
+    mov     ah, ch
+    call    puts
+    ret
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;  Print the contents of a buffer to the screen  ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -217,7 +269,7 @@ bufprint:
     jl      .pregap_normal_text
     cmp     ecx, [ebp-.sel_end]
     jge     .pregap_normal_text
-    mov     ah, BLACK_ON_WHITE
+    mov     ah, BLACK_ON_GREY
     jmp     .pregap_print
 
 .pregap_normal_text:
@@ -238,9 +290,9 @@ bufprint:
     popa
 
     ; if the screen is full, stop printing
-    cmp     byte [ebp-.y], LINES
+    cmp     byte [ebp-.y], TEXT_LINES-1
     jl      .pregap_continue
-    cmp     byte [ebp-.x], COLS
+    cmp     byte [ebp-.x], COLS-1
     je      .done
 
 .pregap_continue:
@@ -267,7 +319,7 @@ bufprint:
     jl      .postgap_normal_text
     cmp     edx, [ebp-.sel_end]
     jge     .postgap_normal_text
-    mov     ah, BLACK_ON_WHITE
+    mov     ah, BLACK_ON_GREY
     jmp     .postgap_print
 
 .postgap_normal_text:
@@ -288,9 +340,9 @@ bufprint:
     popa
 
     ; if the screen is full, stop printing
-    cmp     byte [ebp-.tempY], LINES
+    cmp     byte [ebp-.tempY], TEXT_LINES-1
     jl      .postgap_continue
-    cmp     byte [ebp-.tempX], COLS
+    cmp     byte [ebp-.tempX], COLS-1
     je      .done
 .postgap_continue:
     inc     edx
@@ -354,7 +406,7 @@ clrscr:
 
    cld
    mov      edi, VIDMEM
-   mov      ecx, 2000 ; 25 * 80
+   mov      ecx, TEXT_LINES * COLS
    mov      ah, 0x07 ; default attribute
    mov      al, ' '
    rep      stosw

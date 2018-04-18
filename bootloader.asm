@@ -102,7 +102,7 @@ DPACK:
     db      0x10
     db      0x00
 blk_count:
-    dw      6
+    dw      8
 buffer_address:
     dw      0x1000
     dw      0x0000

@@ -12,6 +12,7 @@ TOTAL_BUFFERS   equ MAX_NUM_TABS*BUFFER_SIZE
 ; colors
 TEXT_COLOR      equ WHITE_ON_BLACK
 HINT_COLOR      equ GREY_ON_BLACK
+STATUS_COLOR    equ BLACK_ON_GREY
 
 ; strings
 welcome:        db  "This is a new tab, you can start typing right away!",0
@@ -34,8 +35,10 @@ clipboard_len   equ 4               + select_end
 current_tab     equ 4               + clipboard_len
 x_coord         equ 1               + current_tab
 y_coord         equ 1               + x_coord
+cursor_x_coord  equ 1               + y_coord
+cursor_y_coord  equ 1               + cursor_x_coord
 
-StackVarSpace   equ y_coord
+StackVarSpace   equ cursor_y_coord
     ; reserve space
     mov         ebp, esp
 
@@ -102,6 +105,18 @@ OPENED_TAB_STATE    equ 0b100
     ; X and Y coordinates
     mov         dword [ebp-x_coord], 0
     mov         dword [ebp-y_coord], 0
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;  Print the status line  ;
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    pusha
+    mov         bh, [ebp-y_coord]
+    mov         bl, [ebp-x_coord]
+    mov         edi, [ebp-current_tab]
+    lea         esi, [ebp-tab_state]
+    call        print_status_line
+    popa
+
 
 ; Wait for keyboard input
 .check:
@@ -381,7 +396,7 @@ OPENED_TAB_STATE    equ 0b100
     call        scanCodeToASCII
 
     ; If the screen is full don't insert to the buffer
-    cmp         byte [ebp-y_coord], LINES-1
+    cmp         byte [ebp-y_coord], TEXT_LINES-1
     jl          .insert_character
     cmp         al, 0x0a ; do not insert a newline character if there are characters in the last line
     je          .dont_insert
@@ -689,8 +704,17 @@ OPENED_TAB_STATE    equ 0b100
 
     call        bufprint
 
+    mov         [ebp-cursor_x_coord], bl
+    mov         [ebp-cursor_y_coord], bh
     mov         [ebp-x_coord], cl
     mov         [ebp-y_coord], ch
+
+    mov         bh, [ebp-cursor_y_coord]
+    mov         bl, [ebp-cursor_x_coord]
+    mov         edi, [ebp-current_tab]
+    lea         esi, [ebp-tab_state]
+
+    call        print_status_line
 
     popa
 .finish_loop:
@@ -936,6 +960,55 @@ print_status_line:
 ;  bl = final x coordinate on the screen
 ;  edi = current tab index
 ;  esi = tab state array
+    jmp     .start
+.line:      db  "Line: ", 0
+.column:    db  "Column: ", 0
+
+.start:
+    pusha
+    ; clear the status line
+    cld
+    mov     ecx, COLS
+    mov     eax, STATUS_LINE-1
+    mul     ecx
+
+    lea     edi, [VIDMEM+eax*2]
+    mov     al, ' '
+    mov     ah, STATUS_COLOR
+    rep     stosw
+
+    mov     esi, .line
+    mov     ah, STATUS_COLOR
+    mov     bh, STATUS_LINE-1
+    mov     bl, COLS - 22 - 1
+    call    puts
+
+    mov     esi, .column
+    mov     ah, STATUS_COLOR
+    add     bl, 4
+    call    puts
+    popa
+
+    ; print column and line coordinates
+    pusha
+    push    ebx
+
+    movzx   eax, bh
+    inc     eax
+    mov     ch, STATUS_COLOR
+    mov     bh, STATUS_LINE-1
+    mov     bl, COLS - 15 - 1
+    call    putdw
+
+    pop     ebx
+    movzx   eax, bl
+    inc     eax
+    mov     ch, STATUS_COLOR
+    mov     bh, STATUS_LINE-1
+    mov     bl, COLS - 3 - 1
+    call    putdw
+    popa
+
     ret
 
     times   (0x400000 - ($ - $$ - 0x200)) db 0
