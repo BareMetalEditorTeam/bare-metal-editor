@@ -10,9 +10,11 @@ BUFFER_SIZE     equ 2000 ; in bytes
 TOTAL_BUFFERS   equ MAX_NUM_TABS*BUFFER_SIZE
 
 ; colors
-TEXT_COLOR      equ WHITE_ON_BLACK
-HINT_COLOR      equ GREY_ON_BLACK
-STATUS_COLOR    equ BLACK_ON_GREY
+TEXT_COLOR          equ WHITE_ON_BLACK
+HINT_COLOR          equ GREY_ON_BLACK
+STATUS_COLOR        equ BLACK_ON_GREY
+TAB_COLOR           equ BLACK_ON_GREY
+ACTIVE_TAB_COLOR    equ BLACK_ON_GREY_BLINK
 
 ; strings
 welcome:        db  "This is a new tab, you can start typing right away!",0
@@ -95,6 +97,7 @@ OPENED_TAB_STATE    equ 0b100
     ; select end
     mov         dword [ebp-select_end], BUFFER_SIZE
     ; tab state array
+    mov         byte [ebp-tab_state], dh
     lea         edi, [ebp-tab_state+1]
     mov         al, NOTOPENED_TAB_STATE
     or          al, FRESH_TAB_STATE
@@ -494,6 +497,7 @@ OPENED_TAB_STATE    equ 0b100
     lea         esi, [ebp-tab_state]
     mov         dh, [esi+eax]
     and         dh, ~NOTOPENED_TAB_STATE
+    mov         [esi+eax], dh
     pop         esi
     pop         eax
     jmp         .shortcut_done
@@ -514,6 +518,7 @@ OPENED_TAB_STATE    equ 0b100
     lea         esi, [ebp-tab_state]
     mov         [esi+eax], dh
     and         dh, ~NOTOPENED_TAB_STATE
+    mov         [esi+eax], dh
     pop         esi
     pop         eax
 
@@ -1009,6 +1014,40 @@ print_status_line:
     call    putdw
     popa
 
+    ; print opened tabs, and highlight the active one
+    xor     ecx, ecx
+    mov     bl, 1
+    mov     bh, STATUS_LINE-1
+.print_tabs:
+    cmp     ecx, MAX_NUM_TABS
+    je      .done
+    test    byte [esi+ecx], NOTOPENED_TAB_STATE
+    jnz     .next_tab
+
+    push    ecx
+    mov     eax, ecx
+    inc     eax
+
+    cmp     ecx, edi
+    jne     .not_active
+    mov     ch, ACTIVE_TAB_COLOR
+    jmp     .print
+.not_active:
+    mov     ch, TAB_COLOR
+.print:
+
+    push    esi
+    push    edi
+    call    putdw
+    pop     edi
+    pop     esi
+    pop     ecx
+
+.next_tab:
+    inc     ecx
+    inc     bl
+    jmp     .print_tabs
+.done:
     ret
 
     times   (0x400000 - ($ - $$ - 0x200)) db 0

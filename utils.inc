@@ -9,6 +9,7 @@
 
 %define WHITE_ON_BLACK  0x0f
 %define BLACK_ON_GREY   0x70
+%define BLACK_ON_GREY_BLINK BLACK_ON_GREY | 0x80
 %define GREY_ON_BLACK   0x07
 
 bits 32
