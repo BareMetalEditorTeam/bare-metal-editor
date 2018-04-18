@@ -62,16 +62,18 @@ CTRL_STATE      equ 0b0100
 SHIFT_CTRL_STATE equ 0b1000
 
     ; Tab State
-    ; old tab
-OLD_TAB         equ 0
-    ; new tab
-FRESH_TAB_STATE equ 1
+    ; A tab that has not been opend yet
+NOTOPENED_TAB_STATE equ 0b001
+    ; A tab that has been opened but is empty
+FRESH_TAB_STATE     equ 0b010
+    ; A tab that has been opend and is not empty
+OPENED_TAB_STATE    equ 0b100
 
     ; initial state
     ; no key is pressed, and the tab is new
     ; dx = 0x0100
     xor         edx, edx
-    mov         dh, FRESH_TAB_STATE
+    or          dh, FRESH_TAB_STATE
 
     ; Initialize variables
     cld
@@ -90,9 +92,10 @@ FRESH_TAB_STATE equ 1
     ; select end
     mov         dword [ebp-select_end], BUFFER_SIZE
     ; tab state array
-    lea         edi, [ebp-tab_state]
-    mov         al, 0x01
-    mov         ecx, MAX_NUM_TABS
+    lea         edi, [ebp-tab_state+1]
+    mov         al, NOTOPENED_TAB_STATE
+    or          al, FRESH_TAB_STATE
+    mov         ecx, MAX_NUM_TABS-1
     rep         stosb
     ; current tab
     mov         dword [ebp-current_tab], 0
@@ -102,8 +105,8 @@ FRESH_TAB_STATE equ 1
 
 ; Wait for keyboard input
 .check:
-    cmp         dh, FRESH_TAB_STATE
-    jne         .wait_for_key
+    test        dh, FRESH_TAB_STATE
+    jz          .wait_for_key
     ; print welcome message
     pusha
     mov         esi, welcome
@@ -327,13 +330,13 @@ FRESH_TAB_STATE equ 1
 ;; Characters
 ; Wait for the break code
 .character:
-    cmp         dh, FRESH_TAB_STATE
-    jne         .makecodes_done
+    test        dh, FRESH_TAB_STATE
+    jz          .makecodes_done
     ; clear the screen on the first key press
     pusha
     call        clrscr
     popa
-    xor         dh, dh
+    and         dh, ~FRESH_TAB_STATE
 .makecodes_done:
     jmp          .finish_loop
 
@@ -444,6 +447,15 @@ FRESH_TAB_STATE equ 1
     jnz         .backward_tab_switch
 ; forward tab switch
     ; save tab state
+    cmp         byte [ebp-y_coord], 0
+    jne         .non_empty_tab
+    cmp         byte [ebp-x_coord], 0
+    jne         .non_empty_tab
+    mov         dh, FRESH_TAB_STATE
+    jmp         .save_tab_state
+.non_empty_tab:
+    mov         dh, OPENED_TAB_STATE
+.save_tab_state:
     push        eax
     push        esi
     mov         eax, [ebp-current_tab]
@@ -466,16 +478,27 @@ FRESH_TAB_STATE equ 1
     mov         eax, [ebp-current_tab]
     lea         esi, [ebp-tab_state]
     mov         dh, [esi+eax]
+    and         dh, ~NOTOPENED_TAB_STATE
     pop         esi
     pop         eax
     jmp         .shortcut_done
 .backward_tab_switch:
     ; save tab state
+    cmp         byte [ebp-y_coord], 0
+    jne         .non_empty_tab
+    cmp         byte [ebp-x_coord], 0
+    jne         .backward_non_empty_tab
+    mov         dh, FRESH_TAB_STATE
+    jmp         .backward_save_tab_state
+.backward_non_empty_tab:
+    mov         dh, OPENED_TAB_STATE
+.backward_save_tab_state:
     push        eax
     push        esi
     mov         eax, [ebp-current_tab]
     lea         esi, [ebp-tab_state]
     mov         [esi+eax], dh
+    and         dh, ~NOTOPENED_TAB_STATE
     pop         esi
     pop         eax
 
@@ -905,6 +928,14 @@ paste_selection:
 ;  ebx = final gap start offset
 ;  edx = final gap end offset
     call    bufinss
+    ret
+
+print_status_line:
+;Parameters
+;  bh = final y coordinate on the screen
+;  bl = final x coordinate on the screen
+;  edi = current tab index
+;  esi = tab state array
     ret
 
     times   (0x400000 - ($ - $$ - 0x200)) db 0
