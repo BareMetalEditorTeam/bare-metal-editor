@@ -77,7 +77,7 @@ putch:
 
     cmp     bh, LINES-1
     jl      .print
-    cmp     bl, COLS
+    cmp     bl, COLS-1
     jge     .done
 
 .print:
@@ -181,8 +181,10 @@ bufprint:
 ;  edi = selection start offset
 ;  eax = selection end offset
 ;Output
-;  bh = final y coordinate
-;  bl = final x coordinate
+;  bh = final cursor y coordinate
+;  bl = final cursor x coordinate
+;  ch = final y coordinate
+;  cl = final x coordinate
 
     ; create a stack frame
     enter   12, 0
@@ -204,6 +206,8 @@ bufprint:
 
     mov     byte [ebp-.x], 0
     mov     byte [ebp-.y], 0
+    mov     byte [ebp-.tempX], 0
+    mov     byte [ebp-.tempY], 0
 
 .pregap_loop:
     cmp     ecx, ebx
@@ -299,6 +303,9 @@ bufprint:
     push    ebx
     call    moveCur
     pop     ebx
+
+    mov     ch, [ebp-.tempY]
+    mov     cl, [ebp-.tempX]
 
     leave
     ret

@@ -22,20 +22,6 @@ welcome:        db  "This is a new tab, you can start typing right away!",0
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 editor:
-    mov         ebp, esp
-
-    ; setup a buffer for each tab
-    sub         esp, TOTAL_BUFFERS  ; buffers
-    sub         esp, MAX_NUM_TABS*4 ; gap start
-    sub         esp, MAX_NUM_TABS*4 ; gap end
-    sub         esp, MAX_NUM_TABS   ; tab state
-    sub         esp, BUFFER_SIZE    ; clipboard
-    sub         esp, 4              ; selection start
-    sub         esp, 4              ; selection end
-    sub         esp, 4              ; clipboard length
-    sub         esp, 4              ; current tab index
-    and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
-
     ; stack variables offsets
 buffers         equ TOTAL_BUFFERS
 gap_start       equ MAX_NUM_TABS*4  + buffers
@@ -46,6 +32,17 @@ select_start    equ 4               + clipboard
 select_end      equ 4               + select_start
 clipboard_len   equ 4               + select_end
 current_tab     equ 4               + clipboard_len
+x_coord         equ 1               + current_tab
+y_coord         equ 1               + x_coord
+
+StackVarSpace   equ y_coord
+    ; reserve space
+    mov         ebp, esp
+
+    ; setup a buffer for each tab
+    sub         esp, StackVarSpace
+    and         esp, 0xfffffff0     ; ensure the stack is aligned to 16-byte boundries
+
 
 
     ;;;;;;;;;;;;;;;;;;;;;;
@@ -99,6 +96,9 @@ FRESH_TAB_STATE equ 1
     rep         stosb
     ; current tab
     mov         dword [ebp-current_tab], 0
+    ; X and Y coordinates
+    mov         dword [ebp-x_coord], 0
+    mov         dword [ebp-y_coord], 0
 
 ; Wait for keyboard input
 .check:
@@ -357,6 +357,8 @@ FRESH_TAB_STATE equ 1
 ; It is a break code of a character
     test        dl, CTRL_STATE
     jnz         .shortcut
+
+
     pusha
 
     test        dl, CAPS_STATE
@@ -375,6 +377,15 @@ FRESH_TAB_STATE equ 1
 .get_ascii:
     call        scanCodeToASCII
 
+    ; If the screen is full don't insert to the buffer
+    cmp         byte [ebp-y_coord], LINES-1
+    jl          .insert_character
+    cmp         al, 0x0a ; do not insert a newline character if there are characters in the last line
+    je          .dont_insert
+    cmp         byte [ebp-x_coord], COLS-1
+    jge         .dont_insert
+
+.insert_character:
     push        eax
 
     ; buffer params
@@ -414,8 +425,9 @@ FRESH_TAB_STATE equ 1
     mov         eax, [ebp-current_tab]
     mov         [ebp-gap_start+eax*4], ebx
     mov         [ebp-gap_end+eax*4], edx
-    popa
 
+.dont_insert:
+    popa
     jmp         .refreshScreen
 
 ;;;;;;;;;;;;;;;;
@@ -653,6 +665,9 @@ FRESH_TAB_STATE equ 1
     mov         eax, [ebp-select_end]
 
     call        bufprint
+
+    mov         [ebp-x_coord], cl
+    mov         [ebp-y_coord], ch
 
     popa
 .finish_loop:
