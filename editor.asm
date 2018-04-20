@@ -373,8 +373,12 @@ OPENED_TAB_STATE    equ 0b100
     je          .reset_shift
     cmp         al, 0xB6 ; RIGHT SHIFT
     je          .reset_shift
+    cmp         al, 0xB7 ; PRINT SCREEN
+    je          .finish_loop
+    cmp         al, 0xB8 ; ALT
+    je          .finish_loop
     cmp         al, 0xB9 ; SPACE
-    ja          .finish_loop
+    jg          .finish_loop
 ; It is a break code of a character
     test        dl, CTRL_STATE
     jnz         .shortcut
