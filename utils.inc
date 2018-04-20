@@ -464,6 +464,8 @@ bufinss:
 ;  ebx = final gap start offset
 ;  edx = final gap end offset
 .loop:
+    or      ecx, ecx
+    jz      .done
     lodsb
     push    esi
     push    ecx
@@ -472,7 +474,9 @@ bufinss:
     pop     edi
     pop     ecx
     pop     esi
-    loop    .loop
+    dec     ecx
+    jmp     .loop
+.done:
     ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -103,6 +103,8 @@ OPENED_TAB_STATE    equ 0b100
     or          al, FRESH_TAB_STATE
     mov         ecx, MAX_NUM_TABS-1
     rep         stosb
+    ; clipboard length
+    mov         dword [ebp-clipboard_len], 0
     ; current tab
     mov         dword [ebp-current_tab], 0
     ; X and Y coordinates
