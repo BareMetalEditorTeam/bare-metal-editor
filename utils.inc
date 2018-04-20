@@ -129,8 +129,18 @@ putch:
 
 .tab:
     pop     ebx ; restore coordinates
+
     mov     al, ' '
+    push    eax
+
+    xor     edx, edx
+    movzx   eax, bl
+    inc     eax
     mov     ecx, 4
+    div     ecx
+    sub     ecx, edx
+
+    pop     eax
 .print_tab:
     push    ecx
     push    eax
