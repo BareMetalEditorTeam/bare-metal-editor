@@ -4,7 +4,7 @@ org 0x7C00
 cli
 
 mov ah , 0x02
-mov al ,8
+mov al , 10
 mov dl , 0x80
 mov ch , 0
 mov dh , 0
@@ -317,11 +317,6 @@ end2:
 ;; Left Shift
     cmp         al, 0x2A
     cmove       dx, si
-    cmp         dx,1
-    jne sss
-    mov byte[edi],'9'
-    add edi,2
-    sss:
     cmp         al, 0x2A
     je        check
     
@@ -463,16 +458,16 @@ break_code:
     push    ecx
     push    esi
     push    edx
-    call    row_num  ; index in edx
-    mov     ecx,EndOfRow
-    mov     esi,[ecx+4*edx]
-    cmp     edi,esi
-    jne ne
-    mov     byte[edi],'1'
-    jmp en1
-    ne:
-    mov     byte[edi],'0'
-    en1:
+    ;call    row_num  ; index in edx
+    ;mov     ecx,EndOfRow
+    ;mov     esi,[ecx+4*edx]
+    ;cmp     edi,esi
+    ;jne ne
+    ;mov     byte[edi],'1'
+    ;jmp en1
+    ;ne:
+    ;mov     byte[edi],'0'
+    ;en1:
     pop     edx
     pop     esi
     pop     ecx
@@ -845,18 +840,15 @@ EnterFun:
 ret
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;print;;;;;;;;;
 print:
-    cmp     dword[cpk],1
-    je      upp
-    cmp     cl,0
+      cmp     cl,0
     je      lower
-    upp:
+    ;upper
     mov     ebp,uppercaseScanCodeTable
     jmp a
     lower:
     mov     ebp,lowercaseScanCodeTable
     a:
     
-    ;check to before or after
     push    edx
     push    ecx
     push    esi
@@ -867,13 +859,127 @@ print:
     mov     esi,[ecx+4*edx]
     cmp     edi,esi
     jg freeWrite
- ;;before  
-  ;check the line (full or not full)
+;before
     mov     ecx,LastColumn
     mov     ebx,[ecx+4*edx]
     cmp     esi,ebx
-    je FULL
-;;NOTFULL:  
+    jne      case1
+;case2:    
+    ;find length of last string in ecx
+    xor     ecx,ecx
+    loop_length:
+    sub     ebx,2
+    inc     ecx
+    cmp     byte[ebx],0x0
+    jne     loop_length
+    
+    ;put edi on the start of the last string 
+    push    edi
+    add     ebx,2
+    mov     edi,ebx
+    sub     ebx,2
+    
+    ;add length of the gab to ecx
+    push    ecx
+    loop_length_gap:
+    sub     ebx,2
+    inc     ecx
+    cmp     byte[ebx],0x0
+    je      loop_length_gap
+    
+    dec     ecx
+    ;sub esi corresponding to ecx
+    sub_esi:
+    sub esi,2
+    loop sub_esi
+    mov     ebx,EndOfRow
+    mov     [ebx+4*edx],esi
+    pop     ecx
+
+    inc     edx
+    l:
+    push    edi
+    push    esi
+    push    ecx
+    push    edx
+    call    case2
+    pop     edx
+    pop     ecx
+    pop     esi
+    pop     edi
+    loop l
+    pop     edi
+    
+    pop     ebx
+    pop     esi
+    pop     ecx
+    pop     edx
+  ret
+   
+case2:
+    
+    mov     ecx,EndOfRow
+    mov     esi,[ecx+4*edx]
+    mov     ecx,LastColumn
+    mov     ebx,[ecx+4*edx]
+    cmp     esi,ebx
+    jne     case2_1
+    
+    ;find length of last string in ecx
+    xor     ecx,ecx
+    loop_length_2:
+    sub     ebx,2
+    inc     ecx
+    cmp     byte[ebx],0x0
+    jne     loop_length_2
+    
+    ;put edi on the start of the last string
+    push    edi 
+    add     ebx,2
+    mov     edi,ebx
+    sub     ebx,2
+    
+    ;add length of the gab to ecx
+    push    ecx
+    loop_length_gap_2:
+    sub     ebx,2
+    inc     ecx
+    cmp     byte[ebx],0x0
+    je loop_length_gap_2
+    
+    dec     ecx
+    ;sub esi corresponding to ecx
+    sub_esi_2:
+    sub     esi,2
+    loop sub_esi_2
+    mov     ebx,EndOfRow
+    mov     [ebx+4*edx],esi
+    pop     ecx
+    
+    ;shift last string to the next line
+    inc     edx
+    ;sub     edi,2
+    l_2:
+    push    ecx
+    push    edx
+    call    case2
+    pop     edx
+    pop     ecx
+    loop l_2
+    pop     edi
+
+    ret
+    case2_1:
+    mov     ecx,EndOfRow
+    add     esi,2 
+    call    RShift
+    mov     byte[edi],0x0
+    add     edi,2
+    mov     [ecx+4*edx],esi
+    
+ret
+
+ case1:
     mov     ecx,EndOfRow
     add     esi,2 
     call    RShift
@@ -882,34 +988,13 @@ print:
     mov     [edi],al
     add     edi,2
     mov     [ecx+4*edx],esi
-    jmp en
-;;FULL
-    FULL:
-    ;check boundaries
-    cmp     esi,757662
-    je      notInRange1
-    
-    call FULL_CASE
-    add     esi,2
-    call RShift
-    mov     ebx,ebp
-    xlat
-    mov     [edi],al
-    add     edi,2
-    ;; pay attention after shifting a full line, endofRow mat can 
-    ;;have an error due spaces on the last of the ROW 
-    ;;set the correct index
-    call    CorrectIndex
-       
-    en:
-    notInRange1:
     pop     ebx
     pop     esi
     pop     ecx
     pop     edx
-    ret
- ;;after
-   freeWrite:                                         
+ret
+
+freeWrite:                                         
     pop     ebx
     pop     esi
     pop     ecx
@@ -918,14 +1003,16 @@ print:
     xlat
     mov         [edi],al
     add         edi,2
-    cmp         al,0x0   ;space
-    je In1
-    
-    ;cahnge endOfRow mat
+    cmp         edi,757664
+    jl InRange1
+    sub         edi,2
+    InRange1: 
     sub     edi,2  
+    
     push    edx;;;;;;;;;;;;;;;;;;
     push    ecx;;;;;;;;;;;;;;;
     push    ebx;;;;;;;;;;;;;;;;
+    
     call    row_num ;;change edx .... row number in edx
     mov     ebx,EndOfRow
     mov     [ebx+4*edx],edi
@@ -933,13 +1020,6 @@ print:
     pop     ecx;.................
     pop     edx;.....................
     add     edi,2
-    
-    In1:
-    ;check screen boundaries
-    cmp         edi,757664
-    jl InRange1
-    sub         edi,2
-    InRange1: 
     
 ret 
     FULL_CASE:
@@ -1143,13 +1223,13 @@ CorrectIndex:
     sub     edi,160      ;start of the Row
     mov     esi,edi
     mov     ecx,80
-    l:
+    l1:
     add     edi,2
     cmp     byte[edi],0x0
     je c1
     mov     esi,edi
     c1:
-    loop l
+    loop l1
     mov     ecx,EndOfRow
     mov     [ecx+4*edx],esi
     pop     esi
@@ -1235,6 +1315,14 @@ delete:
     push    ebx
     push    ecx
     push    edx
+    
+    cmp     dword[shad],0
+    je      aa1
+    call   deleteShad
+    call   clearShad 
+    aa1:
+    mov     ecx,shad
+    
     call    row_num;change edx .... row number in edx
     mov     ebx,EndOfRow
     mov     esi,[ebx+4*edx]
@@ -1261,6 +1349,7 @@ backspace:
     push    ebx
     push    ecx
     push    edx
+    
     cmp     edi,0xb8000
     je      _end
     call    row_num;change edx .... row number in edx
@@ -1282,10 +1371,7 @@ backspace:
 ret
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;completed
 navigate:
-cmp edx,2
-jne xxx
-;mov byte[edi],'2'
-xxx:
+
 ;up
     cmp     al,0x48
     jne     left
@@ -1298,9 +1384,15 @@ xxx:
     sub     edi,1
     US:
     add     edi,2
+    cmp     byte[edi],0x90
+    jne     shad3
+    mov     byte[edi],0xF0
+    jmp     zzz3
+    shad3:
     mov     byte[edi],0x90
+    zzz3:
     loop US
-    
+    call    fillShadMat
     pop     edi
     pop     ecx
     ;code here
@@ -1320,9 +1412,16 @@ xxx:
     cmp     edx,2;;;;;;;;;;;;;;;;;;;;;;;;;
     jne     Sleft
     push    edi
-    add     edi,3
+    add     edi,1
+    cmp     byte[edi],0x90
+    jne      shad1
+    mov     byte[edi],0xF0
+    jmp     zzz
+    shad1:
     mov     byte[edi],0x90
+    zzz:
     pop     edi
+    call    fillShadMat
     ;code here
     ;mov byte[edi],'2'
     Sleft:;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1341,8 +1440,15 @@ xxx:
     jne     Sr
     push    edi
     sub     edi,1
+    cmp     byte[edi],0x90
+    jne     shad2
+    mov     byte[edi],0xF0
+    jmp     zzz1
+    shad2:
     mov     byte[edi],0x90
+    zzz1:
     pop     edi
+    call    fillShadMat
     ;code here
     ;mov byte[edi],'2'
     Sr:;;;;;;;;;;;;;;;;;;;;;;;
@@ -1363,8 +1469,15 @@ xxx:
     add     edi,1
     D:
     sub     edi,2
+    cmp     byte[edi],0x90
+    jne     shad4
+    mov     byte[edi],0xF0
+    jmp     zzz4
+    shad4:
     mov     byte[edi],0x90
+    zzz4:
     loop D
+    call    fillShadMat
     pop     edi
     pop     ecx
     ;code here
@@ -1391,65 +1504,112 @@ shortcut_action:
     ; al contains the scan code of the key pressed along with ctrl
     ; edi is already set tot the current position of the cursor, DON'T CHANGE IT
     ret 
+fillShadMat:
+    ;get shad start
+        pushad
+        mov     esi,0xB8000
+        mov     edi,esi
+        mov     ecx,2000
+        inc     esi
+     start:
+        mov     al,byte[esi]
+        cmp     al,0x90
+        je      done3
+        add     esi,2
+        loop    start
+     done3:
+        dec     esi
+        mov     edi,esi ;start in edi
+        push    edi
+     
+    ;shad end
+        mov     esi,edi ;start in esi
+        inc     esi
+    end11:
+        mov     al,byte[esi]
+        cmp     al,0x90
+        jne     done1
+        mov     edi,esi
+        dec     edi     ;end in edi
+    done1:
+        add     esi,2
+        cmp     esi,757665
+        jl     end11
+
+    ;shad length
+        pop     esi     ;start in esi
+        xor     edx,edx
+        mov     eax,edi
+        sub     eax,esi
+        add     eax,2
+        mov     ecx,2
+        div     ecx     ;eax contain shad length
+        
+    ;fill shad matrix
+        mov     ecx,shad
+        mov     dword[ecx+4],esi
+        mov     dword[ecx+8],edi
+        mov     dword[ecx+12],eax
+        cmp     eax,0
+        je      noCopy
+        mov     dword[ecx],1
+        noCopy:
+        
+        popad
+ ret
     
 copy:
-   ; mov     byte[edi],'c'
-   ; add     edi,2
-    
-    ;clear tab2
-    push        ecx
-    push        edi
-    push        ebp
-    
-    mov         ebp,tabA
-    mov         edi,dword[ebp+8];tab index
-    mov         ecx,2000
-    sub         edi,2
-    zputNULL:
-    add         edi,2
-    mov         byte[edi],0x0
-    loop zputNULL 
-    
-    pop         ebp
-    pop         edi
-    pop         ecx     
-    
-    ;copy from the screen to tab 2
-    pushad
-    
-    mov     ebp,tabA
-    mov     edi,dword[ebp+8];tab index
-    mov     esi,0xB8000
-    mov     ecx,2000
-    mov     ebp,0 ;;counter for copy length
-    kkk:
-    inc     esi
-    mov     al,byte[esi]
-    cmp     al,0x90
-    je     docopy
-    dec     esi
-    jmp     dontcopy
-    docopy:
-    dec     esi
-    mov     al,byte[esi]
-    mov     [edi],al
-    add     edi,2
-    inc     ebp
-    dontcopy:
-    add     esi,2
-    loop kkk
-    
-    mov     esi,copyS
-    mov     dword[esi+4],ebp
-    cmp     ebp,0
-    je      NOCOPY
-    mov     dword[copyS],1
-    NOCOPY:
-    
-    popad
 
+        call        fillShadMat       
+        ;clear tab2
+        push        ecx
+        push        edi
+        push        ebp
+    
+        mov         ebp,tabA
+        mov         edi,dword[ebp+8];tab index
+        mov         ecx,2000
+        sub         edi,2
+        zputNULL:
+        add         edi,2
+        mov         byte[edi],0x0
+        loop zputNULL 
+    
+        pop         ebp
+        pop         edi
+        pop         ecx
+        
+        ;copy from the screen to tab 2
+        pushad
+    
+        mov     ebp,tabA
+        mov     edi,dword[ebp+8];tab index
+        mov     edx,shad
+        mov     esi,dword[edx+4]
+        mov     ecx,dword[edx+12]
+        k11:
+        mov     al,byte[esi]
+        mov     byte[edi],al
+        add     edi,2
+        add     esi,2
+        
+        loop k11
+        
+        mov     edx,shad
+        mov     ebp,dword[edx+12]
+        mov     edx,copyS
+        mov     dword[edx+4],ebp
+        cmp     ebp,0
+        je      NOCOPY
+        mov     dword[copyS],1
+        NOCOPY:
+    
+        popad
 ret
 cut:
+    call copy
+    call deleteShad
+    call clearShad
 ;cmp dword[copyS],0
 ;je zz
 ;    mov     byte[edi],'x'
@@ -1459,7 +1619,10 @@ ret
 paste:
     ;mov     byte[edi],'p'
     ;add     edi,2
-    
+    cmp     dword[copyS],0
+    jne     doPaste   
+    ret
+    doPaste:
     ;;shift corrosponding to copy length
     push    esi
     push    ecx
@@ -1493,49 +1656,50 @@ paste:
     
 ret
 copyALL:
-    ;mov     byte[edi],'a'
-    ;add     edi,2
     
     pushad
+    mov     edi,0xb8000
     mov     ebp,25
     loopsh:
     call    row_num
     mov     ecx,LastColumn
-     mov     esi,dword[ecx+4*edx]
-     sub     esi,160                 ;starting address-2
+    mov     esi,dword[ecx+4*edx]
+    sub     esi,160                 ;starting address-2
     mov     ecx,EndOfRow
-    mov     edi,dword[ecx+4*edx]    ;ending address
+    mov     edx,dword[ecx+4*edx]    ;ending address
     MakeShad:
     add     esi,2
-    cmp     esi,edi
+    cmp     esi,edx
     jg      DONTSHAD
     add     esi,1
     mov     byte[esi],0x90
     sub     esi,1
     jmp     MakeShad
     DONTSHAD:
-   
+    add     edi,160
     dec     ebp
-   cmp     ebp,0   
+    cmp     ebp,0   
     jne loopsh
+    
+    call    fillShadMat
     
     popad
 ret
 MOVEMASSEGE:
     push edi
-push esi
-push ecx
-mov     edi,754464
-add     edi,30
-mov     esi,edi
-mov     edi,754464
-mov     ecx,65
-lpp:
-push esi
+    push esi
+    push ecx
+    mov     edi,754464
+    add     edi,30
+    mov     esi,edi
+    mov     edi,754464
+    mov     ecx,65
+    lpp:
+    push esi
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-call RShift
-mov     byte[edi],0x0
-add     edi,2
+    call RShift
+    mov     byte[edi],0x0
+    add     edi,2
 ;;
  ;delay
     push    ecx
@@ -1558,6 +1722,45 @@ add     edi,2
     pop edi
  
 ret
+deleteShad:
+    pushad
+    mov     edx,shad
+    mov     edi,dword[edx+8]
+    add     edi,2
+    mov     ecx,dword[edx+12]
+    deleteS:
+    mov     al,0
+    call    delete
+    loop deleteS     
+
+    mov     ecx,shad
+    mov     dword[ecx],0
+    mov     dword[ecx+4],0
+    mov     dword[ecx+8],0
+    mov     dword[ecx+12],0
+    popad
+ret
+
+clearShad:
+    pushad
+    mov     ecx,2000
+    mov     esi,0xB8000
+    inc     esi
+    clear:
+    cmp     byte[esi],0x90
+    jne     alreadyCleared
+    mov     byte[esi],0xF0
+    alreadyCleared:
+    add     esi,2
+    loop    clear
+    
+    mov     ecx,shad
+    mov     dword[ecx],0
+    mov     dword[ecx+4],0
+    mov     dword[ecx+8],0
+    mov     dword[ecx+12],0
+    popad
+ret
     tabA:       dd 0,0,0,0,0,0,0,0,0,0,0;[addresses of the 10 tabs , address for the empty tab]
     tabM:       dd 0,0xB8000,0xB8000,0xB8000 ;[tab_Index, edi1, edi2,edi3]   
     LastColumn: dd 0xB809E,0xB813E,0xB81DE,0xB827E,0xB831E,0xB83BE,0xB845E,0xB84FE,0xB859E,0xB863E
@@ -1569,8 +1772,11 @@ ret
             cpk:dd 0
     uppercaseScanCodeTable: db "//!@#$%^&*()_=/",0x00,"QWERTYUIOP[]",0x0a,"/ASDFGHJKL;",0x22,"`/|ZXCVBNM<>?///",0x00,"/"
     lowercaseScanCodeTable: db "//1234567890-+/",0x00,"qwertyuiop{}",0x0a,"/asdfghjkl:",0x27,"~/\zxcvbnm,.////",0x00,"/"
-           shad:dd 0        ;[shad state ]
-           copyS:dd 0,0      ;[copy state , copy length]
+         CapsLK_with_shift: db "//1234567890-+/",0x00,"QWERTYUIOP[]",0x0a,"/ASDFGHJKL;",0x27,"`/|ZXCVBNM<>?///",0x00,"/"
+      CapsLK_without_shift: db "//!@#$%^&*()_=/",0x00,"qwertyuiop{}",0x0a,"/asdfghjkl:",0x27,"~/\zxcvbnm,.////",0x00,"/"
+              
+            shad:dd 0,0,0,0       ;[shad state,shad start,shad end,shad length]
+           copyS:dd 0,0           ;[copy state , copy length]
 
 ; Virtualbox disk configuration
     times       (0x400000 - 512) db 0
